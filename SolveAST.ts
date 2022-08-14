@@ -694,6 +694,7 @@ function getFunctionStr(node: AstNode, clzCnt: ClassContext) {
     const children = node.children;
     let ident = "";
     let name: string;
+    let retType: string = "";
     let params = [] as string[];
     let block: AstNode;
     let isStatic: boolean;
@@ -718,7 +719,11 @@ function getFunctionStr(node: AstNode, clzCnt: ClassContext) {
                 }
             }
         } else if (type === NodeName.IdentifierNode) {
-            name = sovleIndentifierValue(child.value);
+            if (!name) {
+                name = sovleIndentifierValue(child.value);
+            } else {
+                retType = getTSType(sovleIndentifierValue(child.value));
+            }
         } else if (type === NodeName.ContainerNode) {//处理参数
             let subs = child.children;
             for (let i = 0; i < subs.length; i++) {
@@ -726,14 +731,18 @@ function getFunctionStr(node: AstNode, clzCnt: ClassContext) {
             }
         } else if (type === NodeName.ScopedBlockNode) {
             block = child;
+        } else if (type === NodeName.LanguageIdentifierNode) {
+            retType = getTSType(sovleIndentifierValue(child.value));
         }
     }
-
+    if (retType) {
+        retType = ":" + retType;
+    }
     let override = "";
     if (isOverride) {
         override = "override ";
     }
-    let v = `${getBlank(node)}${override}${ident}${getStaticString(isStatic)}${name}(${params.join(",")})`;
+    let v = `${getBlank(node)}${override}${ident}${getStaticString(isStatic)}${name}(${params.join(",")})${retType}`;
     if (block) {
         v += getBlockStr(block, clzCnt);
     }
