@@ -15,7 +15,7 @@ interface AstNode {
      * 从`node`之后到形如`\d+:\d+`之前的部分  上面`BRACES` 为 value
      * value可以为空，也可以是多个以" "分隔的字符串
      */
-    value: string;
+    value: string | string[];
     /**
      * 取的 `abs: 1357-1480` 中，`-` 前面数字部分`1357` 
      */
@@ -56,6 +56,7 @@ const enum NodeName {
      */
     TransparentContainerNode = "TransparentContainerNode",
     ClassNode = "ClassNode",
+    InterfaceNode = "InterfaceNode",
     NilNode = "NilNode",
     ReturnNode = "ReturnNode",
     /**
@@ -75,6 +76,11 @@ const enum NodeName {
     ScopedBlockNode = "ScopedBlockNode",
 
     FunctionNode = "FunctionNode",
+    /**
+     * 函数对象  
+     * children[0] FunctionNode
+     */
+    FunctionObjectNode = "FunctionObjectNode",
     SetterNode = "SetterNode",
     GetterNode = "GetterNode",
     /**
@@ -527,42 +533,47 @@ const enum NodeName {
     IterationFlowNode = "IterationFlowNode",
     LabeledStatementNode = "LabeledStatementNode",
 
+    /**
+     * @see NodeID.ForLoopID
+     * @see NodeID.ForEachLoopID
+     */
     ForLoopNode = "ForLoopNode",
     /**
-     * 
+     * while(){}
      */
     WhileLoopNode = "WhileLoopNode",
+    DoWhileLoopNode = "DoWhileLoopNode",
 }
 
 const enum NodeID {
     /**
-     * TerminalNode  
+     * @see NodeName.TerminalNode  
      * finally
      */
     FinallyID = "FinallyID",
     /**
-     * TerminalNode  
+     * @see NodeName.TerminalNode  
      * else
      */
     ElseID = "ElseID",
     /**
-     * TerminalNode
+     * @see NodeName.TerminalNode
      * default
      */
     DefaultID = "DefaultID",
 
     /**
-     * IterationFlowNode  
+     * @see NodeName.IterationFlowNode  
      * break
      */
     BreakID = "BreakID",
     /**
-     * IterationFlowNode  
+     * @see NodeName.IterationFlowNode  
      * continue
      */
     ContinueID = "ContinueID",
     /**
-     * IterationFlowNode  
+     * @see NodeName.IterationFlowNode  
      * goto  
      * js没对应语法  
      * 一般as3项目也用不到  
@@ -570,18 +581,22 @@ const enum NodeID {
     GotoID = "GotoID",
 
     /**
+     * @see NodeName.KeywordNode
      * extends
      */
     KeywordExtendsID = "KeywordExtendsID",
     /**
+     * @see NodeName.KeywordNode
      * implements
      */
     KeywordImplementsID = "KeywordImplementsID",
     /**
+     * @see NodeName.KeywordNode
      * class
      */
     KeywordClassID = "KeywordClassID",
     /**
+     * @see NodeName.ForLoopNode
      * ```as3
      * for (var i:int = 0; i < arr.length; i++) {}
      * for(var key:String in filesListObj){}
@@ -589,6 +604,7 @@ const enum NodeID {
      */
     ForLoopID = "ForLoopID",
     /**
+     * @see NodeName.ForLoopNode
      * ```as3
      * for each(var v:Sprite in _panList){}
      * ```

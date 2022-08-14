@@ -1,5 +1,5 @@
-import * as readline from "readline";
-import * as fs from "fs";
+import readline from "readline";
+import fs from "fs";
 
 
 export function readAstFile(file: string, callback: { (dict: { [file: string]: AstNode }): any }) {
@@ -11,7 +11,6 @@ export function readAstFile(file: string, callback: { (dict: { [file: string]: A
     const ident = "  ";
     let lineNum = 0;
     let lastLine = "";
-    let rootNode: AstNode;
     rl.on("line", line => {
         lineNum++;
         if (line === "") {//跳过空行
@@ -20,7 +19,7 @@ export function readAstFile(file: string, callback: { (dict: { [file: string]: A
         }
         if (line.slice(-3) !== ".as") {
             if (line.slice(-1) !== "?") {
-                lastLine = line + "\n";
+                lastLine += line + "\n";
                 return
             }
             if (line.startsWith(NodeName.NilNode)) {
@@ -45,19 +44,19 @@ export function readAstFile(file: string, callback: { (dict: { [file: string]: A
         let data = cnt.split(" ");
         let i = 0;
         let nodeType = data[i++];
-        let value = "";
+        let vStart = i;
         let dataLen = data.length;
         while (true) {
             const tester = data[i++];
             if (tester === "?:?" || /\d+:\d+/.test(tester)) {
                 break;
-            } else {
-                value += " " + tester;
             }
             if (i > dataLen) {
                 return
             }
         }
+        let len = i - 1 - vStart;
+        let value = len === 1 ? data[vStart] : data.slice(vStart, i - 1);
         i++;//loc
         i++;//locValue
         i++;//abs
@@ -68,11 +67,11 @@ export function readAstFile(file: string, callback: { (dict: { [file: string]: A
         end = +endStr;
         const bracesStart = nodeType.indexOf("(");
         const bracesEnd = nodeType.indexOf(")");
-        nodeType = nodeType.slice(0, bracesStart);
+        let type = nodeType.slice(0, bracesStart);
         let id = nodeType.slice(bracesStart + 1, bracesEnd);
         const node = {
             level,
-            type: nodeType,
+            type,
             id,
             start,
             end,
