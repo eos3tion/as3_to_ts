@@ -109,7 +109,7 @@ function solveInterface(node: AstNode, context: Context) {
 
     let scopeIdx = getChildIdx(children, extIdx, NodeName.ScopedBlockNode);
     let scope = children[scopeIdx];
-    lines.push(`export class ${name}${baseClassStr} {`);
+    lines.push(`export interface ${name}${baseClassStr} {`);
     const cnt = {
         content: context.content,
         dict: {}
