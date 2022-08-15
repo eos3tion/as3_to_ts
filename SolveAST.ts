@@ -169,7 +169,7 @@ function solveClass(node: AstNode, context: Context) {
 
     lines.push(`export class ${name}${baseClassStr}${implStr} {`);
     if (scope) {
-        lines.push(solveScope(scope, context));
+        lines.push(solveScope(scope, context, name));
     }
     lines.push(`}`)
     return lines.join("\n");
@@ -183,11 +183,13 @@ function solveClass(node: AstNode, context: Context) {
         return lines.join(",");
     }
 
-    function solveScope(node: AstNode, context: Context) {
+    function solveScope(node: AstNode, context: Context, className: string) {
         const { content } = context;
         const children = node.children;
         const dict = {} as ClassDict;
         const setterDict = {} as ClassDict;
+        const constuctors = [] as AstNode[];
+        const others = [] as AstNode[];
         //第一次遍历，得到类中`属性/方法`
         for (let i = 0; i < children.length; i++) {
             const child = children[i];
@@ -203,9 +205,13 @@ function solveClass(node: AstNode, context: Context) {
                     break;
             }
             if (name) {
-                dict[name] = child;
+                if (className === name) {
+                    constuctors.push(child);
+                } else {
+                    dict[name] = child;
+                }
             } else {
-                console.error(`无法获取Class中子节点名称`, child);
+                others.push(child);
             }
         }
         let lines = [] as string[];
@@ -213,6 +219,11 @@ function solveClass(node: AstNode, context: Context) {
             lines,
             content,
             dict
+        }
+        for (let i = 0; i < constuctors.length; i++) {
+            const constuctor = constuctors[i];
+            lines.push(getFunctionStr(constuctor, clzCnt, false, true));
+            lines.push("");
         }
         //检查 block 中`属性/方法`的引用，是否需要加 `this.`
         //先输出属性
@@ -252,7 +263,11 @@ function solveClass(node: AstNode, context: Context) {
                 lines.push("");
             }
         }
-
+        for (let i = 0; i < others.length; i++) {
+            const other = others[i];
+            lines.push(getNodeStr(other, clzCnt));
+            lines.push("");
+        }
         return lines.join("\n");
     }
 
@@ -453,7 +468,7 @@ function getNodeStr(node: AstNode, clzCnt: ClassContext) {
         case NodeName.DynamicAccessNode:
             return getDynamicAccessStr(node, clzCnt);
         case NodeName.FunctionObjectNode:
-            return getFunctionStr(node.children[0], clzCnt);
+            return getFunctionStr(node.children[0], clzCnt, true);
         //========== BinaryOperator ==================================
         case NodeName.BinaryOperatorCommaNode:
             return getLeftRightStr(node, clzCnt, ", ");
@@ -690,7 +705,7 @@ function getDoWhileLoopStr(node: AstNode, clzCnt: ClassContext) {
     return `do${getBlockStr(contentNode, clzCnt)}while${getConStr(conditionNode, clzCnt)}`
 }
 
-function getFunctionStr(node: AstNode, clzCnt: ClassContext) {
+function getFunctionStr(node: AstNode, clzCnt: ClassContext, addFunc?: boolean, isConstructor?: boolean) {
     const children = node.children;
     let ident = "";
     let name: string;
@@ -742,7 +757,12 @@ function getFunctionStr(node: AstNode, clzCnt: ClassContext) {
     if (isOverride) {
         override = "override ";
     }
-    let v = `${getBlank(node)}${override}${ident}${getStaticString(isStatic)}${name}(${params.join(",")})${retType}`;
+    let paramsStr = params.join(",");
+    let funcStr = "";
+    if (addFunc) {
+        funcStr = "function "
+    }
+    let v = isConstructor ? `constructor(${paramsStr})` : `${getBlank(node)}${override}${ident}${getStaticString(isStatic)}${funcStr}${name}(${paramsStr})${retType}`;
     if (block) {
         v += getBlockStr(block, clzCnt);
     }
@@ -756,6 +776,7 @@ function getSetterStr(node: AstNode, clzCnt: ClassContext) {
     let ident = "";
     let isStatic = false;
     let name = "";
+    let retType = "";
     let block: AstNode;
     let paramString = "";
     for (let i = 0; i < children.length; i++) {
@@ -769,7 +790,11 @@ function getSetterStr(node: AstNode, clzCnt: ClassContext) {
                 isStatic = true;
             }
         } else if (type === NodeName.IdentifierNode) {//关键字
-            name = sovleIndentifierValue(child.value);
+            if (!name) {
+                name = sovleIndentifierValue(child.value);
+            } else {
+                retType = getTSType(sovleIndentifierValue(child.value));
+            }
         } else if (type === NodeName.ScopedBlockNode) {
             block = child;
         } else if (type === NodeName.ContainerNode) {
@@ -777,10 +802,14 @@ function getSetterStr(node: AstNode, clzCnt: ClassContext) {
             if (sub.type === NodeName.ParameterNode) {
                 paramString = getParamNodeString(node, clzCnt);
             }
+        } else if (type === NodeName.LanguageIdentifierNode) {
+            retType = getTSType(sovleIndentifierValue(child.value));
         }
     }
-
-    let v = `${getBlank(node)}${ident}${getStaticString(isStatic)}set ${name}(${paramString})`;
+    if (retType) {
+        retType = ":" + retType;
+    }
+    let v = `${getBlank(node)}${ident}${getStaticString(isStatic)}set ${name}(${paramString})${retType}`;
     if (block) {
         v += getBlockStr(block, clzCnt);
     }
@@ -793,6 +822,7 @@ function getGetterStr(node: AstNode, clzCnt: ClassContext) {
     let ident = "";
     let isStatic = false;
     let name = "";
+    let retType = "";
     let block: AstNode;
     for (let i = 0; i < children.length; i++) {
         const child = children[i];
@@ -805,12 +835,21 @@ function getGetterStr(node: AstNode, clzCnt: ClassContext) {
                 isStatic = true;
             }
         } else if (type === NodeName.IdentifierNode) {//关键字
-            name = sovleIndentifierValue(child.value);
+            if (!name) {
+                name = sovleIndentifierValue(child.value);
+            } else {
+                retType = getTSType(sovleIndentifierValue(child.value));
+            }
         } else if (type === NodeName.ScopedBlockNode) {
             block = child;
+        } else if (type === NodeName.LanguageIdentifierNode) {
+            retType = getTSType(sovleIndentifierValue(child.value));
         }
     }
-    let v = `${getBlank(node)}${ident}${getStaticString(isStatic)}get ${name}()`;
+    if (retType) {
+        retType = ":" + retType;
+    }
+    let v = `${getBlank(node)}${ident}${getStaticString(isStatic)}get ${name}()${retType}`;
     if (block) {
         v += getBlockStr(block, clzCnt);
     }
@@ -862,7 +901,7 @@ function getTypedExpressStr(node: AstNode, clzCnt: ClassContext) {
             type = getNodeStr(typeNode, clzCnt);
         }
     }
-    return `Array<${type}>()`;
+    return `Array<${type}>`;
 }
 
 function getVecStr(node: AstNode, clzCnt: ClassContext) {
@@ -894,14 +933,18 @@ function getBlockStr(node: AstNode, clzCnt: ClassContext) {
     return lines.join("\n");
 }
 
-function getConStr(node: AstNode, clzCnt: ClassContext) {
-    let v = `(`;
+function getConStr(node: AstNode, clzCnt: ClassContext, spe = "") {
     const children = node.children;
+    let childs = [] as string[];
     for (let i = 0; i < children.length; i++) {
         const child = children[i];
-        v += getNodeStr(child, clzCnt);
+        if (child.type === NodeName.IdentifierNode) {
+            childs.push(checkAddThis(child, clzCnt));
+        } else {
+            childs.push(getNodeStr(child, clzCnt));
+        }
     }
-    return v + ")";
+    return `(${childs.join(spe)})`
 }
 
 
@@ -916,7 +959,7 @@ function getFuncCallStr(node: AstNode, clzCnt: ClassContext) {
     }
     let nameNode = children[i++];
     v += getNodeStr(nameNode, clzCnt);
-    v += getConStr(children[i], clzCnt);
+    v += getConStr(children[i], clzCnt, ",");
     return v;
 }
 
