@@ -44,6 +44,10 @@ export function readAstFile(file: string, callback: { (dict: { [file: string]: A
         let data = cnt.split(" ");
         let i = 0;
         let nodeType = data[i++];
+        const bracesStart = nodeType.indexOf("(");
+        const bracesEnd = nodeType.indexOf(")");
+        let type = nodeType.slice(0, bracesStart);
+        let id = nodeType.slice(bracesStart + 1, bracesEnd);
         let vStart = i;
         let dataLen = data.length;
         while (true) {
@@ -56,7 +60,42 @@ export function readAstFile(file: string, callback: { (dict: { [file: string]: A
             }
         }
         let len = i - 1 - vStart;
-        let value = len === 1 ? data[vStart] : data.slice(vStart, i - 1);
+        //顺序检查字符串，避免将`"new XX"`拆成多个
+        let value: string | string[];
+        if (len > 0) {
+            if (len === 1) {
+                value = data[vStart];
+            } else {
+                let v = data.slice(vStart, i - 1).join(" ");
+                let vi = 0;
+                let startIdx = 0;
+                let list = [] as string[];
+                let isQuote = false;
+                let lastChar: string;
+                while (vi < v.length) {
+                    let vt = v.charAt(vi);
+                    if (!isQuote && vt === " ") {
+                        list.push(v.slice(startIdx, vi))
+                        startIdx = vi + 1;
+                    } else if (vt === "\"" && lastChar !== "\\") {
+                        if (isQuote) {
+                            isQuote = false;
+                        } else {
+                            isQuote = true;
+                        }
+                    }
+                    lastChar = vt;
+                    vi++;
+                }
+                list.push(v.slice(startIdx, vi));
+                if (list.length === 1) {
+                    value = list[0];
+                } else {
+                    value = list;
+                }
+            }
+        }
+
         i++;//loc
         i++;//locValue
         i++;//abs
@@ -65,10 +104,7 @@ export function readAstFile(file: string, callback: { (dict: { [file: string]: A
         let [startStr, endStr] = absValue.split("-");
         start = +startStr;
         end = +endStr;
-        const bracesStart = nodeType.indexOf("(");
-        const bracesEnd = nodeType.indexOf(")");
-        let type = nodeType.slice(0, bracesStart);
-        let id = nodeType.slice(bracesStart + 1, bracesEnd);
+
         const node = {
             level,
             type,
