@@ -856,7 +856,11 @@ function getTypedExpressStr(node: AstNode, clzCnt: ClassContext) {
     const [_, typeNode] = node.children;
     let type = "any";
     if (typeNode) {
-        type = getTSType(sovleIndentifierValue(typeNode.value));
+        if (typeNode.type === NodeName.IdentifierNode) {
+            type = getTSType(sovleIndentifierValue(typeNode.value));
+        } else {
+            type = getNodeStr(typeNode, clzCnt);
+        }
     }
     return `Array<${type}>()`;
 }
