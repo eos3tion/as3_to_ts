@@ -1,16 +1,235 @@
 import fs from "fs";
 import path from "path";
-export async function solveAst(dict: { [file: string]: AstNode }, callback: { (file: string, cnt: string) }, baseDir = "", filter: { (file: string): boolean } = _ => true) {
-    for (const file in dict) {
-        if (filter(file)) {
-            await solveFileNode(file, dict, baseDir).then(v => callback(file, v));
+
+type FileContext = {
+    pkgDict: { [pkg: string]: FileData[] },
+    pathDict: { [path: string]: FileData }
+    uriDict: { [uri: string]: FileData }
+    nameDict: { [name: string]: FileData }
+}
+
+type FileData = ReturnType<typeof getFile>;
+
+function getFile(file: string, node: AstNode, baseDir: string) {
+    //全部以 baseDir 的相对路径创建 key
+    const p = path.relative(baseDir, file)
+        .slice(0, -3);//去除`.as`后缀
+    const name = path.basename(p);
+
+    //后续 as3 同 pkg 的类，可以直接引用， js都需要 import
+    let pkg = "";
+    /**
+     * ```
+     * import xx.xx.xxx;  
+     * ```
+     * 不带`*`的import
+     */
+    const imps = [] as string[];
+    /**
+     * ```
+     * import xx.xx.xxx.*;  
+     * ```
+     * 这种带`*`的import
+     */
+    const impStars = [] as string[];
+    const clzs = {} as { [name: string]: ClassData };
+    //解析import节点
+    const packageNode = node.children[0];
+
+    const ints = {} as { [name: string]: AstNode };
+    let scope: AstNode;
+    if (packageNode) {
+        scope = packageNode.children[1];
+        pkg = sovleIndentifierValue(packageNode.value);
+
+        if (scope) {
+            const children = scope.children;
+            for (let i = 0; i < children.length; i++) {
+                //检查
+                const node = children[i];
+                const nodeType = node.type;
+                if (nodeType === NodeName.ImportNode) {
+                    const imp = sovleIndentifierValue(node.value);
+                    if (imp.slice(-1) === "*") {
+                        impStars.push(imp.slice(0, -2));
+                    } else {
+                        imps.push(imp);
+                    }
+                } else if (nodeType === NodeName.ClassNode) {
+                    const cData = getClassData(node);
+                    clzs[cData.name] = cData;
+                } else if (nodeType === NodeName.InterfaceNode) {
+                    const name = sovleIndentifierValue(node.value);
+                    ints[name] = node;
+                }
+            }
+        }
+    }
+    if (node.children.length > 1) {
+        console.error(`暂不支持package外部写代码，请检查[${file}]`);
+    }
+    return {
+        name,
+        path: p,
+        pkg: pkg,
+        fullName: `${pkg}.${name}`,
+        node,
+        file,
+        imps,
+        impStars,
+        scope,
+        ints,
+        clzs
+    }
+
+}
+
+
+type ClassData = ReturnType<typeof getClassData>;
+/**
+ * 获取Class上下文
+ * @param node 
+ * @returns 
+ */
+function getClassData(node: AstNode) {
+    const children = node.children;
+    let name = sovleIndentifierValue(node.value);
+    let extIdx = getChildIdx(children, 0, NodeName.KeywordNode, NodeID.KeywordExtendsID);
+    let baseClass = "";
+    if (extIdx > -1) {
+        baseClass = sovleIndentifierValue(children[++extIdx].value);
+    } else {
+        extIdx = 0;
+    }
+
+
+
+    const classData = {
+        name,
+        baseClass,
+        dict: {} as ClassDict,
+        others: [] as AstNode[],
+        constructors: [] as AstNode[],
+        setterDict: {} as ClassDict,
+        node
+    }
+
+    let scopeIdx = getChildIdx(children, extIdx, NodeName.ScopedBlockNode);
+    let scope = children[scopeIdx];
+    if (scope) {
+        solveScope(scope, classData);
+    }
+
+    return classData;
+
+
+    function solveScope(node: AstNode, classData: ClassData) {
+        const children = node.children;
+        const { dict, constructors, others, name: className, setterDict } = classData;
+        // 暂时不区分 public 还是 private protected
+        // const pubDict = {} as ClassDict;
+        //第一次遍历，得到类中`属性 / 方法`
+        for (let i = 0; i < children.length; i++) {
+            const child = children[i];
+            const type = child.type;
+            let name: string;
+            switch (type) {
+                case NodeName.FunctionNode:
+                case NodeName.GetterNode:
+                case NodeName.SetterNode:
+                    name = getFunctionName(child);
+                    break;
+                case NodeName.VariableNode:
+                    name = getVariableName(child);
+                    break;
+            }
+            if (name) {
+                if (className === name) {
+                    constructors.push(child);
+                } else {
+                    dict[name] = child;
+                    if (type === NodeName.SetterNode) {
+                        setterDict[name] = child;
+                    }
+                }
+            } else {
+                others.push(child);
+            }
+        }
+    }
+
+    function getVariableName(node: AstNode) {
+        const children = node.children;
+        for (let i = 0; i < children.length; i++) {
+            const child = children[i];
+            if (child.type === NodeName.KeywordNode) {//关键字
+                const nameNode = children[i + 1];
+                return sovleIndentifierValue(nameNode.value);
+            }
+        }
+    }
+
+    function getFunctionName(node: AstNode) {
+        const children = node.children;
+        for (let i = 0; i < children.length; i++) {
+            const child = children[i];
+            if (child.type === NodeName.IdentifierNode) {
+                return sovleIndentifierValue(child.value);
+            }
         }
     }
 }
 
-interface Context {
-    content: string;
+function getImpls(node: AstNode, impDict: { [name: string]: ImpRefs }) {
+    let impls = [] as string[];
+    const children = node.children;
+    for (let i = 0; i < children.length; i++) {
+        const child = children[i];
+        impls.push(checkImp(sovleIndentifierValue(child.value), impDict));
+    }
+    return impls;
 }
+
+
+export async function solveAst(dict: { [file: string]: AstNode }, callback: { (file: string, cnt: string) }, baseDir = "", filter: { (file: string): boolean } = _ => true) {
+    const pkgDict = {} as { [pkg: string]: FileData[] };
+    const pathDict = {} as { [path: string]: FileData };
+    const fileDict = {} as { [file: string]: FileData };
+    const uriDict = {} as { [uri: string]: FileData };
+    const nameDict = {} as { [name: string]: FileData }
+    for (const file in dict) {
+        const fileData = getFile(file, dict[file], baseDir);
+        const pkg = fileData.pkg;
+        let list = pkgDict[pkg];
+        if (!list) {
+            pkgDict[pkg] = list = [];
+        }
+        list.push(fileData);
+        const name = fileData.name;
+        if (nameDict[name]) {
+            console.error(`有同名文件，请自行处理：[${file}],[${nameDict[name].file}]`)
+        }
+        nameDict[name] = fileData;
+        uriDict[fileData.fullName] = fileData;
+        pathDict[fileData.path] = fileData;
+        fileDict[file] = fileData;
+    }
+
+    const context = {
+        pkgDict,
+        pathDict,
+        uriDict,
+        nameDict
+    }
+
+    for (const file in dict) {
+        if (filter(file)) {
+            const dat = fileDict[file];
+            await solveFileNode(dat, context).then(v => callback(file, v));
+        }
+    }
+}
+
 
 function getBlank(node: AstNode, plus = 0) {
     const level = node.level + plus;
@@ -21,211 +240,133 @@ function getBlank(node: AstNode, plus = 0) {
     return v;
 }
 
-async function solveFileNode(file: string, dict: { [file: string]: AstNode }, baseDir: string) {
-    const fileNode = dict[file];
+async function solveFileNode(data: FileData, cnt: FileContext) {
+    const { clzs, ints, imps, impStars, pkg, file } = data;
     const content = await fs.promises.readFile(file, "utf-8");
-    //处理文件
-    const context = {
-        content,
+    const { pkgDict, uriDict, nameDict } = cnt;
+
+    //基于imps和impStars，创建引用计数器
+
+    const impDict = {} as { [name: string]: ImpRefs };
+    for (let i = 0; i < imps.length; i++) {
+        const imp = imps[i];
+        const idx = imp.lastIndexOf(".");
+        const pkg = imp.slice(0, idx);
+        const name = imp.slice(idx + 1);
+        impDict[name] = { name, fullName: imp, count: 0, pkg }
     }
-    const packageNode = fileNode.children[0];
-    if (!packageNode) {
-        return
-    }
-    const [fullNameNode, scopeNode] = packageNode.children;
-    const pName = sovleIndentifierValue(fullNameNode.value);
-    const pDir = pName.replaceAll(".", path.sep);
-    const children = scopeNode.children;
-    let v = "";
-    for (let i = 0; i < children.length; i++) {
-        //检查
-        const node = children[i];
-        switch (node.type) {
-            case NodeName.ImportNode:
-                v += solveImport(node, context) + "\n";
-                break;
-            case NodeName.ClassNode:
-                v += solveClass(node, context) + "\n";
-                break;
-            case NodeName.InterfaceNode:
-                v += solveInterface(node, context) + "\n";
-                break;
-            default:
-                console.error(`[${file}]中未知节点:${node.type}`, node);
-                break;
-        }
-    }
-    return v;
-    function solveImport(node: AstNode, context: Context) {
-        //处理导入
-        const value = sovleIndentifierValue(node.value);
-        if (value.slice(-1) === "*") {
-            console.log(`[${fileNode.file}]文件使用了${value}带"*"，请自行处理`);
-            return "";
-        }
-        //尝试找到文件
-        let imp = value.replaceAll(".", path.sep);
-        let impName = path.basename(imp);
-        let rela = path.relative(pDir, imp).replaceAll("\\", "/");
-        if (!rela.startsWith(".")) {
-            rela = "./" + rela;
-        }
-        return `import {${impName}} from "${rela}"`;
-    }
-}
-
-
-
-
-type ClassDict = { [key: string]: AstNode };
-
-interface ClassContext extends Context {
-    dict: ClassDict;
-}
-
-function getChildIdx(children: AstNode[], start: number, type: NodeName, id?: NodeID) {
-    let i = start;
-    for (; i < children.length; i++) {
-        const child = children[i];
-        if (child.type === type && (id === undefined || child.id === id)) {
-            return i;
-        }
-    }
-    return -1;
-}
-function solveInterface(node: AstNode, context: Context) {
-    const children = node.children;
-    const lines = [] as string[];
-    let name = sovleIndentifierValue(node.value);
-
-    let extIdx = getChildIdx(children, 0, NodeName.KeywordNode, NodeID.KeywordExtendsID);
-    let baseClassStr = "";
-    if (extIdx > -1) {
-        let baseClass = children[++extIdx];
-        baseClassStr = ` extends ${sovleIndentifierValue(baseClass.value)} `;
-    } else {
-        extIdx = 0;
-    }
-
-    let scopeIdx = getChildIdx(children, extIdx, NodeName.ScopedBlockNode);
-    let scope = children[scopeIdx];
-    lines.push(`export interface ${name}${baseClassStr} {`);
-    const cnt = {
-        content: context.content,
-        dict: {}
-    };
-    if (scope) {
-        const children = scope.children;
-        for (let i = 0; i < children.length; i++) {
-            const child = children[i];
-            switch (child.type) {
-                case NodeName.FunctionNode:
-                    lines.push(getFunctionStr(child, cnt));
-                    break;
-                case NodeName.SetterNode:
-                    lines.push(getSetterStr(child, cnt));
-                    break;
-                case NodeName.GetterNode:
-                    lines.push(getGetterStr(child, cnt));
-                    break;
-                case NodeName.VariableNode:
-                    lines.push(getVarStr(child, cnt));
-                    break;
-            }
-
-        }
-    }
-    lines.push(`}`)
-    return lines.join("\n");
-}
-
-function solveClass(node: AstNode, context: Context) {
-    const children = node.children;
-    const lines = [] as string[];
-    let name = sovleIndentifierValue(node.value);
-    let extIdx = getChildIdx(children, 0, NodeName.KeywordNode, NodeID.KeywordExtendsID);
-    let baseClassStr = "";
-    if (extIdx > -1) {
-        let baseClass = children[++extIdx];
-        baseClassStr = ` extends ${sovleIndentifierValue(baseClass.value)} `;
-    } else {
-        extIdx = 0;
-    }
-
-    let implIdx = getChildIdx(children, extIdx, NodeName.KeywordNode, NodeID.KeywordImplementsID);
-    let implStr = "";
-    if (implIdx > -1) {
-        let contNode = children[++implIdx];
-        if (contNode.type === NodeName.TransparentContainerNode) {
-            implStr = ` implements ${getTransConStr(contNode)}`
-        }
-    } else {
-        implIdx = extIdx;
-    }
-
-
-    let scopeIdx = getChildIdx(children, implIdx, NodeName.ScopedBlockNode);
-    let scope = children[scopeIdx];
-
-    lines.push(`export class ${name}${baseClassStr}${implStr} {`);
-    if (scope) {
-        lines.push(solveScope(scope, context, name));
-    }
-    lines.push(`}`)
-    return lines.join("\n");
-    function getTransConStr(node: AstNode) {
-        let lines = [];
-        const children = node.children;
-        for (let i = 0; i < children.length; i++) {
-            const child = children[i];
-            lines.push(sovleIndentifierValue(child.value));
-        }
-        return lines.join(",");
-    }
-
-    function solveScope(node: AstNode, context: Context, className: string) {
-        const { content } = context;
-        const children = node.children;
-        const dict = {} as ClassDict;
-        const setterDict = {} as ClassDict;
-        const constuctors = [] as AstNode[];
-        const others = [] as AstNode[];
-        //第一次遍历，得到类中`属性/方法`
-        for (let i = 0; i < children.length; i++) {
-            const child = children[i];
-            let name: string;
-            switch (child.type) {
-                case NodeName.FunctionNode:
-                case NodeName.SetterNode:
-                case NodeName.GetterNode:
-                    name = getFunctionName(child);
-                    break;
-                case NodeName.VariableNode:
-                    name = getVariableName(child);
-                    break;
-            }
-            if (name) {
-                if (className === name) {
-                    constuctors.push(child);
-                } else {
-                    dict[name] = child;
+    const stars = impStars.concat(pkg);
+    for (let i = 0; i < stars.length; i++) {
+        const imPkg = stars[i];
+        const list = pkgDict[imPkg];
+        if (list) {
+            for (let i = 0; i < list.length; i++) {
+                const dat = list[i];
+                const clzs = dat.clzs;
+                const pkg = dat.pkg;
+                for (let name in clzs) {
+                    impDict[name] = { pkg, name, fullName: `${pkg}.${name}`, count: 0 };
                 }
-            } else {
-                others.push(child);
+            }
+        } else {
+            console.error(`文件[${file}]中，无法找到指定包[${imPkg}]`)
+        }
+    }
+
+    let v = "";
+
+    for (let className in clzs) {
+        v += solveClass(clzs[className]);
+    }
+
+    for (let interName in ints) {
+        v += solveInterface(ints[interName]);
+    }
+
+    //将引用计数非 0 的 imp 放到文件头
+    for (let name in impDict) {
+        const impDat = impDict[name];
+        if (impDat.count > 0) {
+            const fullName = impDat.fullName;
+            const impFileDat = uriDict[fullName];
+            if (impFileDat) {
+                let rela = path.relative(path.dirname(data.path), impFileDat.path).replaceAll("\\", "/");
+                if (!rela.startsWith(".")) {
+                    rela = "./" + rela;
+                }
+                v = `import {${name}} from "${rela}"\n` + v;
             }
         }
-        let lines = [] as string[];
+    }
+
+    return v;
+    function getBaseDict(data: ClassData, dict: { [name: string]: true }) {
+        const baseClass = data.baseClass;
+        if (baseClass) {
+            let flag = false;
+            const fileDat = nameDict[baseClass]
+
+            if (fileDat) {
+                const baseClassData = fileDat.clzs[baseClass];
+                if (baseClassData) {
+                    const baseDict = baseClassData.dict;
+                    for (let na in baseDict) {
+                        dict[na] = true;
+                    }
+                    return getBaseDict(baseClassData, dict);
+                }
+            }
+
+
+            if (!flag && baseClass !== "Array") {
+                console.error(`[${file}]无法找到基类[${baseClass}]`);
+                debugger
+            }
+        }
+    }
+
+
+    function solveClass(classData: ClassData) {
+        const { baseClass, dict, others, constructors, name, setterDict, node } = classData;
+        let baseClassStr = "";
+        let baseDict = {} as { [name: string]: true };
+        if (baseClass && baseClass !== "Object") {
+            baseClassStr = ` extends ${baseClass}`;
+            getBaseDict(classData, baseDict);
+        }
+        const nodeChildren = node.children;
+
+        let implIdx = getChildIdx(nodeChildren, 0, NodeName.KeywordNode, NodeID.KeywordImplementsID);
+        let impls: string[];
+        if (implIdx > -1) {
+            let contNode = nodeChildren[++implIdx];
+            if (contNode.type === NodeName.TransparentContainerNode) {
+                impls = getImpls(contNode, impDict);
+            }
+        }
+
+        let implStr = "";
+        if (impls) {
+            implStr = ` implements ${impls.join(",")} `
+        }
+
+        const lines = [] as string[];
+
+
+        lines.push(`export class ${name}${baseClassStr}${implStr} {`);
         const clzCnt = {
             lines,
             content,
-            dict
+            dict,
+            baseDict,
+            impDict
         }
-        for (let i = 0; i < constuctors.length; i++) {
-            const constuctor = constuctors[i];
+        for (let i = 0; i < constructors.length; i++) {
+            const constuctor = constructors[i];
             lines.push(getFunctionStr(constuctor, clzCnt, false, true));
             lines.push("");
         }
-        //检查 block 中`属性/方法`的引用，是否需要加 `this.`
+        //检查 block 中`属性 / 方法`的引用，是否需要加 `this.`
         //先输出属性
         for (let key in dict) {
             const dat = dict[key];
@@ -268,31 +409,101 @@ function solveClass(node: AstNode, context: Context) {
             lines.push(getNodeStr(other, clzCnt));
             lines.push("");
         }
+        lines.push(`} `)
         return lines.join("\n");
+
     }
 
-    function getVariableName(node: AstNode) {
+    function solveInterface(node: AstNode) {
         const children = node.children;
-        for (let i = 0; i < children.length; i++) {
-            const child = children[i];
-            if (child.type === NodeName.KeywordNode) {//关键字
-                const nameNode = children[i + 1];
-                return sovleIndentifierValue(nameNode.value);
+        const lines = [] as string[];
+        let name = sovleIndentifierValue(node.value);
+
+        let extIdx = getChildIdx(children, 0, NodeName.KeywordNode, NodeID.KeywordExtendsID);
+        let baseClassStr = "";
+        if (extIdx > -1) {
+            let contNode = children[++extIdx];
+            if (contNode.type === NodeName.TransparentContainerNode) {
+                let impls = getImpls(contNode, impDict);
+                baseClassStr = ` extends ${impls.join(",")} `;
+            }
+        } else {
+            extIdx = 0;
+        }
+
+        let scopeIdx = getChildIdx(children, extIdx, NodeName.ScopedBlockNode);
+        let scope = children[scopeIdx];
+        lines.push(`export interface ${name}${baseClassStr} {`);
+        const cnt = {
+            content,
+            dict: {},
+            baseDict: {},
+            impDict
+        };
+        if (scope) {
+            const children = scope.children;
+            for (let i = 0; i < children.length; i++) {
+                const child = children[i];
+                switch (child.type) {
+                    case NodeName.FunctionNode:
+                        lines.push(getFunctionStr(child, cnt));
+                        break;
+                    case NodeName.SetterNode:
+                        lines.push(getSetterStr(child, cnt));
+                        break;
+                    case NodeName.GetterNode:
+                        lines.push(getGetterStr(child, cnt));
+                        break;
+                    case NodeName.VariableNode:
+                        lines.push(getVarStr(child, cnt));
+                        break;
+                }
+
             }
         }
-    }
+        lines.push(`} `)
+        return lines.join("\n");
 
-    function getFunctionName(node: AstNode) {
-        const children = node.children;
-        for (let i = 0; i < children.length; i++) {
-            const child = children[i];
-            if (child.type === NodeName.IdentifierNode) {
-                return sovleIndentifierValue(child.value);
-            }
-        }
     }
-
 }
+
+
+
+
+type ClassDict = { [key: string]: AstNode };
+
+type ImpRefs = {
+    name: string,
+    /**
+     * package全名
+     */
+    fullName: string,
+    pkg: string,
+    /**
+     * 引用计数
+     */
+    count: number
+};
+
+interface ClassContext {
+    dict: ClassDict;
+    baseDict: { [name: string]: true };
+    impDict: { [name: string]: ImpRefs }
+    content: string;
+}
+
+function getChildIdx(children: AstNode[], start: number, type: NodeName, id?: NodeID) {
+    let i = start;
+    for (; i < children.length; i++) {
+        const child = children[i];
+        if (child.type === type && (id === undefined || child.id === id)) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+
 
 function sovleIndentifierValue(msg: string | string[]) {
     if (typeof msg !== "string") {
@@ -333,10 +544,10 @@ function getParamNodeString(node: AstNode, clzCnt: ClassContext) {
 }
 
 function solveParam(paramNameNode: AstNode, paramTypeNode: AstNode, defaultNode: AstNode, clzCnt: ClassContext) {
-    let v = `${sovleIndentifierValue(paramNameNode.value)}:${getTSType(getNodeStr(paramTypeNode, clzCnt))}`;
+    let v = `${sovleIndentifierValue(paramNameNode.value)}:${getTSType(getNodeStr(paramTypeNode, clzCnt))} `;
     if (defaultNode) {
         let val = getNodeStr(defaultNode, clzCnt);
-        v += ` = ${val}`;
+        v += ` = ${val} `;
     }
     return v;
 }
@@ -365,10 +576,21 @@ function getLiteralStr(node: AstNode, clzCnt: ClassContext) {
     return value;
 }
 
+function checkImp(v: string, impDict: { [name: string]: ImpRefs }) {
+    let d = impDict[v];
+    if (d) {
+        d.count++;
+    }
+    return v;
+}
+
 function checkAddThis(node: AstNode, clzCnt: ClassContext) {
     let v = sovleIndentifierValue(node.value);
-    if (v in clzCnt.dict) {//成员变量
-        v = `this.${v}`;
+    const { dict, baseDict, impDict } = clzCnt;
+    if (v in dict || v in baseDict) {//成员变量
+        v = `this.${v} `;
+    } else {
+        checkImp(v, impDict);
     }
     return v;
 }
@@ -378,7 +600,7 @@ function getLeftRightStr(node: AstNode, clzCnt: ClassContext, middle: string) {
     const [leftNode, rightNode] = children;
     let left = getLeftStr(leftNode, clzCnt);
     let right = getNodeStr(rightNode, clzCnt);
-    return `${left}${middle}${right}`;
+    return `${left}${middle}${right} `;
 }
 
 function getDynamicAccessStr(node: AstNode, clzCnt: ClassContext) {
@@ -386,7 +608,7 @@ function getDynamicAccessStr(node: AstNode, clzCnt: ClassContext) {
     const [leftNode, rightNode] = children;
     let left = getLeftStr(leftNode, clzCnt);
     let right = getNodeStr(rightNode, clzCnt);
-    return `${left}[${right}]`;
+    return `${left} [${right}]`;
 }
 
 function getTernaryStr(node: AstNode, clzCnt: ClassContext) {
@@ -395,7 +617,7 @@ function getTernaryStr(node: AstNode, clzCnt: ClassContext) {
     let con = getNodeStr(conNode, clzCnt);
     let left = getLeftStr(leftNode, clzCnt);
     let right = getNodeStr(rightNode, clzCnt);
-    return `${con} ? ${left} : ${right}`;
+    return `${con} ? ${left} : ${right} `;
 }
 
 function getLeftStr(node: AstNode, clzCnt: ClassContext) {
@@ -422,7 +644,7 @@ function getIfNodeStr(node: AstNode, clzCnt: ClassContext) {
             if (subs.length === 2) {
                 let [con, cnt] = subs;
                 let prefix = i === 0 ? "if" : "else if";
-                lines.push(`${mainBlank}${prefix}(${getNodeStr(con, clzCnt)}) `);
+                lines.push(`${mainBlank}${prefix} (${getNodeStr(con, clzCnt)})`);
                 lines.push(getNodeStr(cnt, clzCnt));
             } else {
                 console.log(`条件节点没有2个子节点`, child);
@@ -562,7 +784,7 @@ function getNodeStr(node: AstNode, clzCnt: ClassContext) {
         case NodeName.UnaryOperatorPostDecrementNode:
             return getUnaryRightStr(node, clzCnt, "--");
         case NodeName.UnaryOperatorAtNode:
-            throw Error(`不允许使用@,[${node.root.file}]`);
+            throw Error(`不允许使用 @, [${node.root.file}]`);
         case NodeName.UnaryOperatorLogicalNotNode:
             return getUnaryLeftStr(node, clzCnt, "!");
         case NodeName.UnaryOperatorBitwiseNotNode:
@@ -667,7 +889,7 @@ function getChainVarStr(node: AstNode, clzCnt: ClassContext) {
  */
 function getReturnStr(node: AstNode, clzCnt: ClassContext) {
     const children = node.children;
-    let v = `${getBlank(node)}return `;
+    let v = `${getBlank(node)} return `;
     for (let i = 0; i < children.length; i++) {
         const child = children[i];
         const type = child.type;
@@ -687,22 +909,22 @@ function getForLoopStr(node: AstNode, clzCnt: ClassContext) {
     if (id === NodeID.ForEachLoopID) {
         //for each(A in B) -> for(A of B)
         const nodeIn = conditionNode.children[0];
-        return `for(${getLeftRightStr(nodeIn, clzCnt, " of ")}${getBlockStr(contentNode, clzCnt)}`;
+        return `for (${getLeftRightStr(nodeIn, clzCnt, " of ")}${getBlockStr(contentNode, clzCnt)} `;
 
     } else {//当 ForLoopID 处理 
-        return `for${getConStr(conditionNode, clzCnt)}${getBlockStr(contentNode, clzCnt)}`
+        return `for${getConStr(conditionNode, clzCnt)}${getBlockStr(contentNode, clzCnt)} `
 
     }
 }
 
 function getWhileLoopStr(node: AstNode, clzCnt: ClassContext) {
     const [conditionNode, contentNode] = node.children;
-    return `while${getConStr(conditionNode, clzCnt)}${getBlockStr(contentNode, clzCnt)}`
+    return `while${getConStr(conditionNode, clzCnt)}${getBlockStr(contentNode, clzCnt)} `
 }
 
 function getDoWhileLoopStr(node: AstNode, clzCnt: ClassContext) {
     const [contentNode, conditionNode] = node.children;
-    return `do${getBlockStr(contentNode, clzCnt)}while${getConStr(conditionNode, clzCnt)}`
+    return `do${getBlockStr(contentNode, clzCnt)}while${getConStr(conditionNode, clzCnt)} `
 }
 
 function getFunctionStr(node: AstNode, clzCnt: ClassContext, addFunc?: boolean, isConstructor?: boolean) {
@@ -762,7 +984,7 @@ function getFunctionStr(node: AstNode, clzCnt: ClassContext, addFunc?: boolean, 
     if (addFunc) {
         funcStr = "function "
     }
-    let v = isConstructor ? `constructor(${paramsStr})` : `${getBlank(node)}${override}${ident}${getStaticString(isStatic)}${funcStr}${name}(${paramsStr})${retType}`;
+    let v = isConstructor ? `constructor(${paramsStr})` : `${getBlank(node)}${override}${ident}${getStaticString(isStatic)}${funcStr}${name} (${paramsStr})${retType} `;
     if (block) {
         v += getBlockStr(block, clzCnt);
     }
@@ -809,7 +1031,7 @@ function getSetterStr(node: AstNode, clzCnt: ClassContext) {
     if (retType) {
         retType = ":" + retType;
     }
-    let v = `${getBlank(node)}${ident}${getStaticString(isStatic)}set ${name}(${paramString})${retType}`;
+    let v = `${getBlank(node)}${ident}${getStaticString(isStatic)}set ${name} (${paramString})${retType} `;
     if (block) {
         v += getBlockStr(block, clzCnt);
     }
@@ -849,7 +1071,7 @@ function getGetterStr(node: AstNode, clzCnt: ClassContext) {
     if (retType) {
         retType = ":" + retType;
     }
-    let v = `${getBlank(node)}${ident}${getStaticString(isStatic)}get ${name}()${retType}`;
+    let v = `${getBlank(node)}${ident}${getStaticString(isStatic)}get ${name} ()${retType} `;
     if (block) {
         v += getBlockStr(block, clzCnt);
     }
@@ -867,13 +1089,13 @@ function getObjStr(node: AstNode, clzCnt: ClassContext) {
             const child = children[i];
             lines.push(getObjKVStr(child, clzCnt));
         }
-        v = `{${lines.join(", ")}}`;
+        v = `{${lines.join(", ")} } `;
     }
     return v;
 }
 function getObjKVStr(node: AstNode, clzCnt: ClassContext) {
     const [keyNode, valueNode] = node.children;
-    return `${sovleIndentifierValue(keyNode.value)} : ${getNodeStr(valueNode, clzCnt)}`
+    return `${sovleIndentifierValue(keyNode.value)} : ${getNodeStr(valueNode, clzCnt)} `
 }
 
 function getArrStr(node: AstNode, clzCnt: ClassContext) {
@@ -901,7 +1123,7 @@ function getTypedExpressStr(node: AstNode, clzCnt: ClassContext) {
             type = getNodeStr(typeNode, clzCnt);
         }
     }
-    return `Array<${type}>`;
+    return `Array < ${type}> `;
 }
 
 function getVecStr(node: AstNode, clzCnt: ClassContext) {
@@ -914,7 +1136,7 @@ function getVecStr(node: AstNode, clzCnt: ClassContext) {
             const child = children[i];
             lines.push(getNodeStr(child, clzCnt));
         }
-        v = `Array<${getTSType(sovleIndentifierValue(idNode.value))}>(${lines.join(", ")})`;
+        v = `Array < ${getTSType(sovleIndentifierValue(idNode.value))}> (${lines.join(", ")})`;
     }
     return v;
 }
@@ -975,7 +1197,7 @@ function getTryStr(node: AstNode, clzCnt: ClassContext) {
 
 function getCatchStr(node: AstNode, clzCnt: ClassContext) {
     const [argNode, cntNode] = node.children;
-    return `catch(${getParamNodeString(argNode, clzCnt)})${getBlockStr(cntNode, clzCnt)}`;
+    return `catch (${getParamNodeString(argNode, clzCnt)})${getBlockStr(cntNode, clzCnt)} `;
 }
 
 function getTerminalStr(node: AstNode, clzCnt: ClassContext) {
@@ -1029,11 +1251,11 @@ function getLabelStr(node: AstNode, clzCnt: ClassContext) {
 function getUnaryRightStr(node: AstNode, clzCnt: ClassContext, right: string) {
     const child = node.children[0];
     let v = getNodeStr(child, clzCnt);
-    return `${v}${right}`;
+    return `${v}${right} `;
 }
 
 function getUnaryLeftStr(node: AstNode, clzCnt: ClassContext, left: string) {
     const child = node.children[0];
     let v = getNodeStr(child, clzCnt);
-    return `${left}${v}`;
+    return `${left}${v} `;
 }
