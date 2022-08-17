@@ -241,7 +241,7 @@ function getBlank(node: AstNode, plus = 0) {
 }
 
 async function solveFileNode(data: FileData, cnt: FileContext) {
-    const { clzs, ints, imps, impStars, pkg, file } = data;
+    const { clzs, ints, imps, impStars, pkg, file, name: fileName } = data;
     const content = await fs.promises.readFile(file, "utf-8");
     const { pkgDict, uriDict, nameDict } = cnt;
 
@@ -255,7 +255,7 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
         const name = imp.slice(idx + 1);
         impDict[name] = { name, fullName: imp, count: 0, pkg }
     }
-    const stars = impStars.concat(pkg);
+    const stars = impStars.concat(pkg, "");
     for (let i = 0; i < stars.length; i++) {
         const imPkg = stars[i];
         const list = pkgDict[imPkg];
@@ -286,7 +286,7 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
     //将引用计数非 0 的 imp 放到文件头
     for (let name in impDict) {
         const impDat = impDict[name];
-        if (impDat.count > 0) {
+        if (name !== fileName && impDat.count > 0) {
             const fullName = impDat.fullName;
             const impFileDat = uriDict[fullName];
             if (impFileDat) {
@@ -544,10 +544,11 @@ function getParamNodeString(node: AstNode, clzCnt: ClassContext) {
 }
 
 function solveParam(paramNameNode: AstNode, paramTypeNode: AstNode, defaultNode: AstNode, clzCnt: ClassContext) {
-    let v = `${sovleIndentifierValue(paramNameNode.value)}:${getTSType(getNodeStr(paramTypeNode, clzCnt))} `;
+    let typeStr = checkAddThis(paramTypeNode, clzCnt);
+    let v = `${sovleIndentifierValue(paramNameNode.value)}:${getTSType(typeStr)} `;
     if (defaultNode) {
         let val = getNodeStr(defaultNode, clzCnt);
-        v += ` = ${val} `;
+        v += ` = ${val}`;
     }
     return v;
 }
@@ -585,12 +586,17 @@ function checkImp(v: string, impDict: { [name: string]: ImpRefs }) {
 }
 
 function checkAddThis(node: AstNode, clzCnt: ClassContext) {
-    let v = sovleIndentifierValue(node.value);
-    const { dict, baseDict, impDict } = clzCnt;
-    if (v in dict || v in baseDict) {//成员变量
-        v = `this.${v} `;
+    let v = "";
+    if (node.type === NodeName.IdentifierNode) {
+        v = sovleIndentifierValue(node.value);
+        const { dict, baseDict, impDict } = clzCnt;
+        if (v in dict || v in baseDict) {//成员变量
+            v = `this.${v} `;
+        } else {
+            checkImp(v, impDict);
+        }
     } else {
-        checkImp(v, impDict);
+        v = getNodeStr(node, clzCnt);
     }
     return v;
 }
@@ -598,36 +604,26 @@ function checkAddThis(node: AstNode, clzCnt: ClassContext) {
 function getLeftRightStr(node: AstNode, clzCnt: ClassContext, middle: string) {
     const children = node.children;
     const [leftNode, rightNode] = children;
-    let left = getLeftStr(leftNode, clzCnt);
-    let right = getNodeStr(rightNode, clzCnt);
-    return `${left}${middle}${right} `;
+    let left = checkAddThis(leftNode, clzCnt);
+    let right = checkAddThis(rightNode, clzCnt);
+    return `${left}${middle}${right}`;
 }
 
 function getDynamicAccessStr(node: AstNode, clzCnt: ClassContext) {
     const children = node.children;
     const [leftNode, rightNode] = children;
-    let left = getLeftStr(leftNode, clzCnt);
-    let right = getNodeStr(rightNode, clzCnt);
-    return `${left} [${right}]`;
+    let left = checkAddThis(leftNode, clzCnt);
+    let right = checkAddThis(rightNode, clzCnt);
+    return `${left}[${right}]`;
 }
 
 function getTernaryStr(node: AstNode, clzCnt: ClassContext) {
     const children = node.children;
     const [conNode, leftNode, rightNode] = children;
-    let con = getNodeStr(conNode, clzCnt);
-    let left = getLeftStr(leftNode, clzCnt);
-    let right = getNodeStr(rightNode, clzCnt);
-    return `${con} ? ${left} : ${right} `;
-}
-
-function getLeftStr(node: AstNode, clzCnt: ClassContext) {
-    let left: string;
-    if (node.type === NodeName.IdentifierNode) {//左值已经是最基本的标识符节点
-        left = checkAddThis(node, clzCnt);
-    } else {
-        left = getNodeStr(node, clzCnt);
-    }
-    return left;
+    let con = checkAddThis(conNode, clzCnt);
+    let left = checkAddThis(leftNode, clzCnt);
+    let right = checkAddThis(rightNode, clzCnt);
+    return `${con} ? ${left} : ${right}`;
 }
 
 
@@ -655,7 +651,11 @@ function getIfNodeStr(node: AstNode, clzCnt: ClassContext) {
 }
 
 function getMemberAccessExpressionNodeStr(node: AstNode, clzCnt: ClassContext) {
-    return getLeftRightStr(node, clzCnt, ".");
+    const children = node.children;
+    const [leftNode, rightNode] = children;
+    let left = checkAddThis(leftNode, clzCnt);
+    let right = getNodeStr(rightNode, clzCnt);
+    return `${left}.${right}`;
 }
 
 function getNodeStr(node: AstNode, clzCnt: ClassContext) {
@@ -892,13 +892,7 @@ function getReturnStr(node: AstNode, clzCnt: ClassContext) {
     let v = `${getBlank(node)} return `;
     for (let i = 0; i < children.length; i++) {
         const child = children[i];
-        const type = child.type;
-        if (type === NodeName.IdentifierNode) {
-            //检查是否为成员变量
-            v += checkAddThis(child, clzCnt);
-        } else {
-            v += getNodeStr(child, clzCnt);
-        }
+        v += checkAddThis(child, clzCnt);
     }
     return v;
 }
@@ -959,7 +953,7 @@ function getFunctionStr(node: AstNode, clzCnt: ClassContext, addFunc?: boolean, 
             if (!name) {
                 name = sovleIndentifierValue(child.value);
             } else {
-                retType = getTSType(sovleIndentifierValue(child.value));
+                retType = getTSType(checkAddThis(child, clzCnt));
             }
         } else if (type === NodeName.ContainerNode) {//处理参数
             let subs = child.children;
@@ -984,7 +978,7 @@ function getFunctionStr(node: AstNode, clzCnt: ClassContext, addFunc?: boolean, 
     if (addFunc) {
         funcStr = "function "
     }
-    let v = isConstructor ? `constructor(${paramsStr})` : `${getBlank(node)}${override}${ident}${getStaticString(isStatic)}${funcStr}${name} (${paramsStr})${retType} `;
+    let v = isConstructor ? `constructor(${paramsStr})` : `${getBlank(node)}${ident}${override}${getStaticString(isStatic)}${funcStr}${name} (${paramsStr})${retType} `;
     if (block) {
         v += getBlockStr(block, clzCnt);
     }
@@ -1015,7 +1009,7 @@ function getSetterStr(node: AstNode, clzCnt: ClassContext) {
             if (!name) {
                 name = sovleIndentifierValue(child.value);
             } else {
-                retType = getTSType(sovleIndentifierValue(child.value));
+                retType = getTSType(checkAddThis(child, clzCnt));
             }
         } else if (type === NodeName.ScopedBlockNode) {
             block = child;
@@ -1095,7 +1089,7 @@ function getObjStr(node: AstNode, clzCnt: ClassContext) {
 }
 function getObjKVStr(node: AstNode, clzCnt: ClassContext) {
     const [keyNode, valueNode] = node.children;
-    return `${sovleIndentifierValue(keyNode.value)} : ${getNodeStr(valueNode, clzCnt)} `
+    return `${sovleIndentifierValue(keyNode.value)} : ${checkAddThis(valueNode, clzCnt)} `
 }
 
 function getArrStr(node: AstNode, clzCnt: ClassContext) {
@@ -1160,11 +1154,7 @@ function getConStr(node: AstNode, clzCnt: ClassContext, spe = "") {
     let childs = [] as string[];
     for (let i = 0; i < children.length; i++) {
         const child = children[i];
-        if (child.type === NodeName.IdentifierNode) {
-            childs.push(checkAddThis(child, clzCnt));
-        } else {
-            childs.push(getNodeStr(child, clzCnt));
-        }
+        childs.push(checkAddThis(child, clzCnt));
     }
     return `(${childs.join(spe)})`
 }
@@ -1180,7 +1170,7 @@ function getFuncCallStr(node: AstNode, clzCnt: ClassContext) {
         i++;
     }
     let nameNode = children[i++];
-    v += getNodeStr(nameNode, clzCnt);
+    v += checkAddThis(nameNode, clzCnt);
     v += getConStr(children[i], clzCnt, ",");
     return v;
 }
