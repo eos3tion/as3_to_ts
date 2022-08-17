@@ -223,7 +223,7 @@ const enum NodeName {
      * `bb:cc = dd` 为此节点
      */
     ChainedVariableNode = "ChainedVariableNode",
-
+    VariableExpressionNode = "VariableExpressionNode",
     /**
      * 三元操作符  
      * ```

@@ -40,7 +40,7 @@ function getFile(file: string, node: AstNode, baseDir: string) {
     let scope: AstNode;
     if (packageNode) {
         scope = packageNode.children[1];
-        pkg = sovleIndentifierValue(packageNode.value);
+        pkg = solveIdentifierValue(packageNode.value);
 
         if (scope) {
             const children = scope.children;
@@ -49,7 +49,7 @@ function getFile(file: string, node: AstNode, baseDir: string) {
                 const node = children[i];
                 const nodeType = node.type;
                 if (nodeType === NodeName.ImportNode) {
-                    const imp = sovleIndentifierValue(node.value);
+                    const imp = solveIdentifierValue(node.value);
                     if (imp.slice(-1) === "*") {
                         impStars.push(imp.slice(0, -2));
                     } else {
@@ -59,7 +59,7 @@ function getFile(file: string, node: AstNode, baseDir: string) {
                     const cData = getClassData(node);
                     clzs[cData.name] = cData;
                 } else if (nodeType === NodeName.InterfaceNode) {
-                    const name = sovleIndentifierValue(node.value);
+                    const name = solveIdentifierValue(node.value);
                     ints[name] = node;
                 }
             }
@@ -93,11 +93,11 @@ type ClassData = ReturnType<typeof getClassData>;
  */
 function getClassData(node: AstNode) {
     const children = node.children;
-    let name = sovleIndentifierValue(node.value);
+    let name = solveIdentifierValue(node.value);
     let extIdx = getChildIdx(children, 0, NodeName.KeywordNode, NodeID.KeywordExtendsID);
     let baseClass = "";
     if (extIdx > -1) {
-        baseClass = sovleIndentifierValue(children[++extIdx].value);
+        baseClass = solveIdentifierValue(children[++extIdx].value);
     } else {
         extIdx = 0;
     }
@@ -194,7 +194,7 @@ function getClassData(node: AstNode) {
             const child = children[i];
             if (child.type === NodeName.KeywordNode) {//关键字
                 const nameNode = children[i + 1];
-                return sovleIndentifierValue(nameNode.value);
+                return solveIdentifierValue(nameNode.value);
             }
         }
     }
@@ -204,7 +204,7 @@ function getClassData(node: AstNode) {
         for (let i = 0; i < children.length; i++) {
             const child = children[i];
             if (child.type === NodeName.IdentifierNode) {
-                return sovleIndentifierValue(child.value);
+                return solveIdentifierValue(child.value);
             }
         }
     }
@@ -215,7 +215,7 @@ function getImpls(node: AstNode, impDict: { [name: string]: ImpRefs }) {
     const children = node.children;
     for (let i = 0; i < children.length; i++) {
         const child = children[i];
-        impls.push(checkImp(sovleIndentifierValue(child.value), impDict));
+        impls.push(checkImp(solveIdentifierValue(child.value), impDict));
     }
     return impls;
 }
@@ -389,6 +389,10 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
 
 
         lines.push(`export class ${name}${baseClassStr}${implStr} {`);
+
+        if (baseClass) {
+            checkImp(baseClass, impDict);
+        }
         const clzCnt = {
             name,
             lines,
@@ -485,7 +489,7 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
     function solveInterface(node: AstNode) {
         const children = node.children;
         const lines = [] as string[];
-        let name = sovleIndentifierValue(node.value);
+        let name = solveIdentifierValue(node.value);
 
         let extIdx = getChildIdx(children, 0, NodeName.KeywordNode, NodeID.KeywordExtendsID);
         let baseClassStr = "";
@@ -579,11 +583,11 @@ function getChildIdx(children: AstNode[], start: number, type: NodeName, id?: No
 
 
 
-function sovleIndentifierValue(msg: string | string[]) {
+function solveIdentifierValue(msg: string | string[]) {
     if (typeof msg !== "string") {
-        msg = msg[0];
+        msg = msg[1];
     }
-    return msg.slice(1, -1);
+    return msg.slice(1, -1).replaceAll("\n", "\\n");
 }
 
 
@@ -613,22 +617,29 @@ function getParamNodeString(node: AstNode, clzCnt: ClassContext) {
             v = "...";
         }
     }
-    v += solveParam(paramNameNode, paramTypeNode, defaultNode, clzCnt);
+    v += solveParam(paramNameNode, paramTypeNode, defaultNode, clzCnt, true);
     return v;
 }
 
-function solveParam(paramNameNode: AstNode, paramTypeNode: AstNode, defaultNode: AstNode, clzCnt: ClassContext) {
+function solveParam(paramNameNode: AstNode, paramTypeNode: AstNode, defaultNode: AstNode, clzCnt: ClassContext, addOpt: boolean) {
     let typeStr = checkAddThis(paramTypeNode, clzCnt);
-    let v = `${sovleIndentifierValue(paramNameNode.value)}:${getTSType(typeStr)} `;
+    let defStr = "";
+    let optStr = "";
     if (defaultNode) {
         let val = getNodeStr(defaultNode, clzCnt);
-        v += ` = ${val}`;
+        if (val === "null" || val === "undefined" || val === "void 0") {
+            if (addOpt) {
+                optStr = "?";
+            }
+        } else {
+            defStr = ` = ${val}`;
+        }
     }
-    return v;
+    return `${solveIdentifierValue(paramNameNode.value)}${optStr}:${getTSType(typeStr)}${defStr}`;
 }
 
 function getNamespaceIdent(node: AstNode) {
-    let v = sovleIndentifierValue(node.value);
+    let v = solveIdentifierValue(node.value);
     if (v === "public") {
         v = "";
     } else {
@@ -648,7 +659,7 @@ function getStaticString(isStatic: boolean) {
 
 function getLiteralStr(node: AstNode, clzCnt: ClassContext) {
     let [, value] = node.value as string;
-    return value;
+    return value.replaceAll("\n", "\\n");
 }
 
 function checkImp(v: string, impDict: { [name: string]: ImpRefs }) {
@@ -662,7 +673,7 @@ function checkImp(v: string, impDict: { [name: string]: ImpRefs }) {
 function checkAddThis(node: AstNode, clzCnt: ClassContext) {
     let v = "";
     if (node.type === NodeName.IdentifierNode) {
-        v = sovleIndentifierValue(node.value);
+        v = solveIdentifierValue(node.value);
         const { dict, staticDict, baseDict, impDict, baseStaticDict, name } = clzCnt;
         if (v in dict || v in baseDict) {//成员变量
             v = `this.${v}`;
@@ -746,6 +757,8 @@ function getNodeStr(node: AstNode, clzCnt: ClassContext) {
             return getTernaryStr(node, clzCnt);
         case NodeName.VariableNode:
             return getVarStr(node, clzCnt);
+        case NodeName.VariableExpressionNode:
+            return getVarStr(node.children[0], clzCnt);
         case NodeName.LiteralNode:
         case NodeName.NumericLiteralNode:
             return getLiteralStr(node, clzCnt);
@@ -756,9 +769,9 @@ function getNodeStr(node: AstNode, clzCnt: ClassContext) {
         case NodeName.ObjectLiteralValuePairNode:
             return getObjKVStr(node, clzCnt);
         case NodeName.LanguageIdentifierNode:
-            return sovleIndentifierValue(node.value);
+            return solveIdentifierValue(node.value);
         case NodeName.IdentifierNode://变量那些，最好不走这个，没法判断是否加`this`
-            return sovleIndentifierValue(node.value);
+            return solveIdentifierValue(node.value);
         case NodeName.ChainedVariableNode:
             return getChainVarStr(node, clzCnt);
         case NodeName.TypedExpressionNode:
@@ -916,7 +929,7 @@ function getNodeStr(node: AstNode, clzCnt: ClassContext) {
 function getVarStr(node: AstNode, clzCnt: ClassContext, isClass?: boolean) {
     const children = node.children;
     let ident = "";
-    let find = -1;
+    let find = 0;
     let isConst = false;
     let isStatic = false;
 
@@ -938,23 +951,31 @@ function getVarStr(node: AstNode, clzCnt: ClassContext, isClass?: boolean) {
             break;
         }
     }
+    let val = "";
+    if (find > 0) {
+        if (isConst) {
+            val = "const ";
+        } else {
+            val = "var ";
+        }
+    }
 
     const nameNode = children[find];
     const typeNode = children[find + 1];
     const defaultNode = children[find + 2];
 
-    let v = solveParam(nameNode, typeNode, defaultNode, clzCnt);
+    let v = solveParam(nameNode, typeNode, defaultNode, clzCnt, false);
     if (isClass) {
         v = ident + getStaticString(isStatic) + v;
     } else {
-        v = isConst ? "const " : "var " + v;//使用 `var` 不用 `let`，`as3`的`var`作用域和`js`一致
+        v = val + v;//使用 `var` 不用 `let`，`as3`的`var`作用域和`js`一致
     }
     return v;
 }
 
 function getChainVarStr(node: AstNode, clzCnt: ClassContext) {
     const [nameNode, typeNode, defaultNode] = node.children;
-    return ", " + solveParam(nameNode, typeNode, defaultNode, clzCnt) + "\n";
+    return ", " + solveParam(nameNode, typeNode, defaultNode, clzCnt, false) + "\n";
 }
 
 
@@ -980,22 +1001,31 @@ function getForLoopStr(node: AstNode, clzCnt: ClassContext) {
     if (id === NodeID.ForEachLoopID) {
         //for each(A in B) -> for(A of B)
         const nodeIn = conditionNode.children[0];
-        return `for (${getLeftRightStr(nodeIn, clzCnt, " of ")}${getBlockStr(contentNode, clzCnt)} `;
+        return `for (${getLeftRightStr(nodeIn, clzCnt, " of ")})${getBlockStr(contentNode, clzCnt)} `;
 
     } else {//当 ForLoopID 处理 
-        return `for${getConStr(conditionNode, clzCnt)}${getBlockStr(contentNode, clzCnt)} `
+        //检查是for(var a in b)还是 for(var i=0;i<n;i++);
+        const conChildren = conditionNode.children;
+        let conStr = "";
+        const child0 = conChildren[0];
+        if (conChildren.length === 1 && child0.type === NodeName.BinaryOperatorInNode) {
+            conStr = `${getNodeStr(child0, clzCnt)}`
+        } else {
+            conStr = getConStr(conditionNode, clzCnt, ";");
+        }
+        return `for(${conStr})${getBlockStr(contentNode, clzCnt)} `
 
     }
 }
 
 function getWhileLoopStr(node: AstNode, clzCnt: ClassContext) {
     const [conditionNode, contentNode] = node.children;
-    return `while${getConStr(conditionNode, clzCnt)}${getBlockStr(contentNode, clzCnt)} `
+    return `while(${getNodeStr(conditionNode, clzCnt)})${getBlockStr(contentNode, clzCnt)} `
 }
 
 function getDoWhileLoopStr(node: AstNode, clzCnt: ClassContext) {
     const [contentNode, conditionNode] = node.children;
-    return `do${getBlockStr(contentNode, clzCnt)}while${getConStr(conditionNode, clzCnt)} `
+    return `do${getBlockStr(contentNode, clzCnt)}while(${getNodeStr(conditionNode, clzCnt)}) `
 }
 
 function getFunctionStr(node: AstNode, clzCnt: ClassContext, addFunc?: boolean, isConstructor?: boolean) {
@@ -1028,7 +1058,7 @@ function getFunctionStr(node: AstNode, clzCnt: ClassContext, addFunc?: boolean, 
             }
         } else if (type === NodeName.IdentifierNode) {
             if (!name) {
-                name = sovleIndentifierValue(child.value);
+                name = solveIdentifierValue(child.value);
             } else {
                 retType = getTSType(checkAddThis(child, clzCnt));
             }
@@ -1040,7 +1070,7 @@ function getFunctionStr(node: AstNode, clzCnt: ClassContext, addFunc?: boolean, 
         } else if (type === NodeName.ScopedBlockNode) {
             block = child;
         } else if (type === NodeName.LanguageIdentifierNode) {
-            retType = getTSType(sovleIndentifierValue(child.value));
+            retType = getTSType(solveIdentifierValue(child.value));
         }
     }
     if (retType) {
@@ -1084,7 +1114,7 @@ function getSetterStr(node: AstNode, clzCnt: ClassContext) {
             }
         } else if (type === NodeName.IdentifierNode) {//关键字
             if (!name) {
-                name = sovleIndentifierValue(child.value);
+                name = solveIdentifierValue(child.value);
             } else {
                 retType = getTSType(checkAddThis(child, clzCnt));
             }
@@ -1096,7 +1126,7 @@ function getSetterStr(node: AstNode, clzCnt: ClassContext) {
                 paramString = getParamNodeString(node, clzCnt);
             }
         } else if (type === NodeName.LanguageIdentifierNode) {
-            retType = getTSType(sovleIndentifierValue(child.value));
+            retType = getTSType(solveIdentifierValue(child.value));
         }
     }
     if (retType) {
@@ -1129,14 +1159,14 @@ function getGetterStr(node: AstNode, clzCnt: ClassContext) {
             }
         } else if (type === NodeName.IdentifierNode) {//关键字
             if (!name) {
-                name = sovleIndentifierValue(child.value);
+                name = solveIdentifierValue(child.value);
             } else {
-                retType = getTSType(sovleIndentifierValue(child.value));
+                retType = getTSType(solveIdentifierValue(child.value));
             }
         } else if (type === NodeName.ScopedBlockNode) {
             block = child;
         } else if (type === NodeName.LanguageIdentifierNode) {
-            retType = getTSType(sovleIndentifierValue(child.value));
+            retType = getTSType(solveIdentifierValue(child.value));
         }
     }
     if (retType) {
@@ -1166,7 +1196,7 @@ function getObjStr(node: AstNode, clzCnt: ClassContext) {
 }
 function getObjKVStr(node: AstNode, clzCnt: ClassContext) {
     const [keyNode, valueNode] = node.children;
-    return `${sovleIndentifierValue(keyNode.value)} : ${checkAddThis(valueNode, clzCnt)} `
+    return `${solveIdentifierValue(keyNode.value)} : ${checkAddThis(valueNode, clzCnt)} `
 }
 
 function getArrStr(node: AstNode, clzCnt: ClassContext) {
@@ -1189,7 +1219,7 @@ function getTypedExpressStr(node: AstNode, clzCnt: ClassContext) {
     let type = "any";
     if (typeNode) {
         if (typeNode.type === NodeName.IdentifierNode) {
-            type = getTSType(sovleIndentifierValue(typeNode.value));
+            type = getTSType(solveIdentifierValue(typeNode.value));
         } else {
             type = getNodeStr(typeNode, clzCnt);
         }
@@ -1207,7 +1237,7 @@ function getVecStr(node: AstNode, clzCnt: ClassContext) {
             const child = children[i];
             lines.push(getNodeStr(child, clzCnt));
         }
-        v = `Array < ${getTSType(sovleIndentifierValue(idNode.value))}> (${lines.join(", ")})`;
+        v = `Array < ${getTSType(solveIdentifierValue(idNode.value))}> (${lines.join(", ")})`;
     }
     return v;
 }
@@ -1235,24 +1265,39 @@ function getConStr(node: AstNode, clzCnt: ClassContext, spe = "") {
     let childs = [] as string[];
     for (let i = 0; i < children.length; i++) {
         const child = children[i];
-        childs.push(checkAddThis(child, clzCnt));
+        if (child.type === NodeName.ContainerNode) {
+            childs.push(getConStr(child, clzCnt, ","));
+        } else {
+            childs.push(checkAddThis(child, clzCnt));
+        }
     }
-    return `(${childs.join(spe)})`
+    let pre = "";
+    let suf = "";
+    if (node.value !== "SYNTHESIZED") {
+        pre = "(";
+        suf = ")";
+    }
+    return `${pre}${childs.join(spe)}${suf}`
 }
 
 
 function getFuncCallStr(node: AstNode, clzCnt: ClassContext) {
     const children = node.children;
-    let i = 0;
     let v = "";
-    let child = children[i];
-    if (child.type === NodeName.KeywordNode) {// new
-        v = "new ";
-        i++;
+    if (node.value === `"__JS__"`) {// laya的 JS直接输出的方法
+        const strNode = children[1].children[0];
+        v = solveIdentifierValue(strNode.value);
+    } else {
+        let i = 0;
+        let child = children[i];
+        if (child.type === NodeName.KeywordNode) {// new
+            v = "new ";
+            i++;
+        }
+        let nameNode = children[i++];
+        v += checkAddThis(nameNode, clzCnt);
+        v += `(${getConStr(children[i], clzCnt, ",")})`;
     }
-    let nameNode = children[i++];
-    v += checkAddThis(nameNode, clzCnt);
-    v += getConStr(children[i], clzCnt, ",");
     return v;
 }
 
@@ -1306,7 +1351,7 @@ function getIterationFlowStr(node: AstNode, clzCnt: ClassContext) {
     }
     const label = node.children[0];
     if (label) {
-        v += " " + sovleIndentifierValue(label.value)
+        v += " " + solveIdentifierValue(label.value)
     }
     v += ";\n"
     return v;
@@ -1314,7 +1359,7 @@ function getIterationFlowStr(node: AstNode, clzCnt: ClassContext) {
 
 function getLabelStr(node: AstNode, clzCnt: ClassContext) {
     const [idNode, statementNode] = node.children;
-    let v = sovleIndentifierValue(idNode.value);
+    let v = solveIdentifierValue(idNode.value);
     v += getNodeStr(statementNode, clzCnt);
     return v;
 }
