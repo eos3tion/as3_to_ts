@@ -111,6 +111,7 @@ function getClassData(node: AstNode) {
         others: [] as AstNode[],
         constructors: [] as AstNode[],
         setterDict: {} as ClassDict,
+        staticDict: {} as ClassDict,
         node
     }
 
@@ -125,7 +126,7 @@ function getClassData(node: AstNode) {
 
     function solveScope(node: AstNode, classData: ClassData) {
         const children = node.children;
-        const { dict, constructors, others, name: className, setterDict } = classData;
+        const { dict, constructors, others, name: className, setterDict, staticDict } = classData;
         // 暂时不区分 public 还是 private protected
         // const pubDict = {} as ClassDict;
         //第一次遍历，得到类中`属性 / 方法`
@@ -133,21 +134,28 @@ function getClassData(node: AstNode) {
             const child = children[i];
             const type = child.type;
             let name: string;
+            let isStatic = false;
             switch (type) {
                 case NodeName.FunctionNode:
                 case NodeName.GetterNode:
                 case NodeName.SetterNode:
                     name = getFunctionName(child);
+                    isStatic = getIsStatic(child);
                     break;
                 case NodeName.VariableNode:
                     name = getVariableName(child);
+                    isStatic = getIsStatic(child);
                     break;
             }
             if (name) {
                 if (className === name) {
                     constructors.push(child);
                 } else {
-                    dict[name] = child;
+                    if (isStatic) {
+                        staticDict[name] = child;
+                    } else {
+                        dict[name] = child;
+                    }
                     if (type === NodeName.SetterNode) {
                         setterDict[name] = child;
                     }
@@ -156,6 +164,28 @@ function getClassData(node: AstNode) {
                 others.push(child);
             }
         }
+    }
+
+    function getIsStatic(node: AstNode) {
+        const children = node.children;
+        let isStatic = false;
+        for (let i = 0; i < children.length; i++) {
+            const child = children[i];
+            if (child.type === NodeName.ModifiersContainerNode) {
+                //检查 children
+                const subs = child.children;
+                for (let i = 0; i < subs.length; i++) {
+                    const sub = subs[i];
+                    if (sub.type === NodeName.ModifierNode) {
+                        let v = sub.value;
+                        if (v === `"static"`) {
+                            isStatic = true;
+                        }
+                    }
+                }
+            }
+        }
+        return isStatic;
     }
 
     function getVariableName(node: AstNode) {
@@ -300,7 +330,7 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
     }
 
     return v;
-    function getBaseDict(data: ClassData, dict: { [name: string]: true }) {
+    function getBaseDict(data: ClassData, dict: { [name: string]: true }, staticDict: { [name: string]: true }) {
         const baseClass = data.baseClass;
         if (baseClass) {
             let flag = false;
@@ -313,7 +343,11 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
                     for (let na in baseDict) {
                         dict[na] = true;
                     }
-                    return getBaseDict(baseClassData, dict);
+                    const baseStaticDict = baseClassData.staticDict;
+                    for (let na in baseStaticDict) {
+                        staticDict[na] = true;
+                    }
+                    return getBaseDict(baseClassData, dict, staticDict);
                 }
             }
 
@@ -327,12 +361,13 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
 
 
     function solveClass(classData: ClassData) {
-        const { baseClass, dict, others, constructors, name, setterDict, node } = classData;
+        const { baseClass, dict, staticDict, others, constructors, name, setterDict, node } = classData;
         let baseClassStr = "";
         let baseDict = {} as { [name: string]: true };
+        let baseStaticDict = {} as { [name: string]: true };
         if (baseClass && baseClass !== "Object") {
             baseClassStr = ` extends ${baseClass}`;
-            getBaseDict(classData, baseDict);
+            getBaseDict(classData, baseDict, baseStaticDict);
         }
         const nodeChildren = node.children;
 
@@ -355,11 +390,14 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
 
         lines.push(`export class ${name}${baseClassStr}${implStr} {`);
         const clzCnt = {
+            name,
             lines,
             content,
             dict,
+            staticDict,
             baseDict,
-            impDict
+            impDict,
+            baseStaticDict
         }
         for (let i = 0; i < constructors.length; i++) {
             const constuctor = constructors[i];
@@ -368,6 +406,28 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
         }
         //检查 block 中`属性 / 方法`的引用，是否需要加 `this.`
         //先输出属性
+        for (let key in staticDict) {
+            const dat = staticDict[key];
+            if (dat.type === NodeName.VariableNode) {
+                lines.push(getVarStr(dat, clzCnt, true));
+                lines.push("");
+            }
+        }
+
+        for (let key in staticDict) {
+            const dat = staticDict[key];
+            if (dat.type === NodeName.GetterNode) {
+                lines.push(getGetterStr(dat, clzCnt));
+                lines.push("");
+                let setter = setterDict[key];
+                if (setter) {//`getter`  `setter`  放一起
+                    lines.push(getSetterStr(setter, clzCnt));
+                    lines.push("");
+                    delete setterDict[key];
+                }
+            }
+        }
+
         for (let key in dict) {
             const dat = dict[key];
             if (dat.type === NodeName.VariableNode) {
@@ -396,6 +456,14 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
             lines.push("");
         }
 
+        //最后附加函数
+        for (let key in staticDict) {
+            const dat = staticDict[key];
+            if (dat.type === NodeName.FunctionNode) {
+                lines.push(getFunctionStr(dat, clzCnt));
+                lines.push("");
+            }
+        }
         //最后附加函数
         for (let key in dict) {
             const dat = dict[key];
@@ -435,6 +503,9 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
         let scope = children[scopeIdx];
         lines.push(`export interface ${name}${baseClassStr} {`);
         const cnt = {
+            name,
+            staticDict: {},
+            baseStaticDict: {},
             content,
             dict: {},
             baseDict: {},
@@ -486,7 +557,10 @@ type ImpRefs = {
 };
 
 interface ClassContext {
+    name: string;
     dict: ClassDict;
+    staticDict: ClassDict;
+    baseStaticDict: { [name: string]: true };
     baseDict: { [name: string]: true };
     impDict: { [name: string]: ImpRefs }
     content: string;
@@ -589,9 +663,11 @@ function checkAddThis(node: AstNode, clzCnt: ClassContext) {
     let v = "";
     if (node.type === NodeName.IdentifierNode) {
         v = sovleIndentifierValue(node.value);
-        const { dict, baseDict, impDict } = clzCnt;
+        const { dict, staticDict, baseDict, impDict, baseStaticDict, name } = clzCnt;
         if (v in dict || v in baseDict) {//成员变量
-            v = `this.${v} `;
+            v = `this.${v}`;
+        } else if (v in staticDict || v in baseStaticDict) {
+            v = `${name}.${v}`;
         } else {
             checkImp(v, impDict);
         }
@@ -640,7 +716,7 @@ function getIfNodeStr(node: AstNode, clzCnt: ClassContext) {
             if (subs.length === 2) {
                 let [con, cnt] = subs;
                 let prefix = i === 0 ? "if" : "else if";
-                lines.push(`${mainBlank}${prefix} (${getNodeStr(con, clzCnt)})`);
+                lines.push(`${mainBlank}${prefix} (${checkAddThis(con, clzCnt)})`);
                 lines.push(getNodeStr(cnt, clzCnt));
             } else {
                 console.log(`条件节点没有2个子节点`, child);
