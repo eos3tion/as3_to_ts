@@ -253,6 +253,10 @@ const enum NodeName {
      */
     IfNode = "IfNode",
     /**
+     * switch
+     */
+    SwitchNode = "SwitchNode",
+    /**
      * 条件节点  
      * 下面为多个 
      * `BinaryOperator` 节点以及一个`BlockNode`

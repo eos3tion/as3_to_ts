@@ -908,7 +908,8 @@ function getNodeStr(node: AstNode, clzCnt: ClassContext) {
             return getWhileLoopStr(node, clzCnt);
         case NodeName.DoWhileLoopNode:
             return getDoWhileLoopStr(node, clzCnt);
-
+        case NodeName.SwitchNode:
+            return getSwitchStr(node, clzCnt);
     }
 }
 
@@ -1212,16 +1213,20 @@ function getVecStr(node: AstNode, clzCnt: ClassContext) {
 }
 
 function getBlockStr(node: AstNode, clzCnt: ClassContext) {
-    if (node.value === "SYNTHESIZED") {
-        return "";
+    let isSynthesized = node.value === "SYNTHESIZED";
+
+    let lines = [] as string[];
+    if (!isSynthesized) {
+        lines.push("{");
     }
-    let lines = ["{"] as string[];
     const children = node.children;
     for (let i = 0; i < children.length; i++) {
         const child = children[i];
         lines.push(getNodeStr(child, clzCnt));
     }
-    lines.push("}");
+    if (!isSynthesized) {
+        lines.push("}");
+    }
     return lines.join("\n");
 }
 
@@ -1324,4 +1329,26 @@ function getUnaryLeftStr(node: AstNode, clzCnt: ClassContext, left: string) {
     const child = node.children[0];
     let v = getNodeStr(child, clzCnt);
     return `${left}${v} `;
+}
+
+function getSwitchStr(node: AstNode, clzCnt: ClassContext) {
+    const children = node.children;
+    const [condNode, cntNode] = children;
+    let v = `switch (${checkAddThis(condNode, clzCnt)}) {\n`;
+    const cases = cntNode.children;
+    for (let i = 0; i < cases.length; i++) {
+        const caseNode = cases[i];
+        const caseChildren = caseNode.children;
+        let cnt: AstNode;
+        if (caseNode.type !== NodeName.TerminalNode) {
+            v += `\tcase ${checkAddThis(caseChildren[0], clzCnt)}:\n`;
+            cnt = caseChildren[1];
+        } else {
+            v += `default:\n`;
+            cnt = caseChildren[0];
+        }
+        v += getNodeStr(cnt, clzCnt) + "\n";
+    }
+    v += "}";
+    return v;
 }
