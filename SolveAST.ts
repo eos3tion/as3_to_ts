@@ -1060,7 +1060,7 @@ function getSetterStr(node: AstNode, clzCnt: ClassContext) {
         } else if (type === NodeName.ContainerNode) {
             let sub = child.children[0];
             if (sub.type === NodeName.ParameterNode) {
-                paramString = getParamNodeString(node, clzCnt);
+                paramString = getParamNodeString(sub, clzCnt);
             }
         } else if (type === NodeName.LanguageIdentifierNode) {
             retType = getTSType(solveIdentifierValue(child.value));
