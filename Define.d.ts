@@ -45,6 +45,10 @@ interface AstNode {
     level: number;
 }
 
+interface FunctionScopeNode extends AstNode {
+    dict: ClassDict;
+}
+
 const enum NodeName {
     FileNode = "FileNode",
     PackageNode = "PackageNode",
@@ -619,3 +623,7 @@ const enum NodeID {
      */
     ForEachLoopID = "ForEachLoopID",
 }
+
+
+
+type ClassDict = { [key: string]: AstNode };
