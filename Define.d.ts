@@ -171,6 +171,10 @@ const enum NodeName {
      */
     ObjectLiteralValuePairNode = "ObjectLiteralValuePairNode",
     /**
+     * 正则表达式节点
+     */
+    RegExpLiteralNode = "RegExpLiteralNode",
+    /**
      * Vector.<int>
      * ```
      * TypedExpressionNode(TypedExpressionID) 43:16 loc: 1505-1530 abs: 1505-1530 D:\workspace\wallan2022\sjcq\game\src\com\game\skill\panelShow\ShootOffSkillUIShowControl.as

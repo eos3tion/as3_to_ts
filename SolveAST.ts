@@ -662,6 +662,13 @@ function getLiteralStr(node: AstNode, clzCnt: ClassContext) {
     return value.replaceAll("\n", "\\n");
 }
 
+function getRegExpStr(node: AstNode, clzCnt: ClassContext) {
+    //输出的ast文本，会丢失  "g" "i" "m" 等正则标记，AS3正则表达式只有命名分组和js命名分组不一致，所以先直接输出
+    let v = clzCnt.content.slice(node.start, node.end);
+    //TODO 将as3的命名分组写法转化为js的命名分组写法
+    return v;
+}
+
 function checkImp(v: string, impDict: { [name: string]: ImpRefs }) {
     let d = impDict[v];
     if (d) {
@@ -762,6 +769,8 @@ function getNodeStr(node: AstNode, clzCnt: ClassContext) {
         case NodeName.LiteralNode:
         case NodeName.NumericLiteralNode:
             return getLiteralStr(node, clzCnt);
+        case NodeName.RegExpLiteralNode:
+            return getRegExpStr(node, clzCnt);
         case NodeName.FunctionCallNode:
             return getFuncCallStr(node, clzCnt);
         case NodeName.ParameterNode:
