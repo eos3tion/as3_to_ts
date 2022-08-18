@@ -1089,7 +1089,7 @@ function getArrStr(node: AstNode, clzCnt: ClassContext) {
         const children = container.children;
         for (let i = 0; i < children.length; i++) {
             const child = children[i];
-            lines.push(getNodeStr(child, clzCnt));
+            lines.push(checkAddThis(child, clzCnt));
         }
         v = `[${lines.join(", ")}]`;
     }
