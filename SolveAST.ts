@@ -1322,7 +1322,8 @@ function getTryStr(node: AstNode, clzCnt: ClassContext) {
 
 function getCatchStr(node: AstNode, clzCnt: ClassContext) {
     const [argNode, cntNode] = node.children;
-    return `catch (${getParamNodeString(argNode, clzCnt)})${getBlockStr(cntNode, clzCnt)} `;
+    const paramNameNode = argNode.children[0];
+    return `catch (${solveIdentifierValue(paramNameNode.value)})${getBlockStr(cntNode, clzCnt)} `;
 }
 
 function getTerminalStr(node: AstNode, clzCnt: ClassContext) {
@@ -1388,17 +1389,19 @@ function getUnaryLeftStr(node: AstNode, clzCnt: ClassContext, left: string) {
 function getSwitchStr(node: AstNode, clzCnt: ClassContext) {
     const children = node.children;
     const [condNode, cntNode] = children;
-    let v = `switch (${checkAddThis(condNode, clzCnt)}) {\n`;
+    let v = `switch (${checkAddThis(condNode, clzCnt)
+        }) {
+\n`;
     const cases = cntNode.children;
     for (let i = 0; i < cases.length; i++) {
         const caseNode = cases[i];
         const caseChildren = caseNode.children;
         let cnt: AstNode;
         if (caseNode.type !== NodeName.TerminalNode) {
-            v += `\tcase ${checkAddThis(caseChildren[0], clzCnt)}:\n`;
+            v += `\tcase ${checkAddThis(caseChildren[0], clzCnt)}: \n`;
             cnt = caseChildren[1];
         } else {
-            v += `default:\n`;
+            v += `default: \n`;
             cnt = caseChildren[0];
         }
         v += getNodeStr(cnt, clzCnt) + "\n";
