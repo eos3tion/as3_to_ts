@@ -969,7 +969,7 @@ function getFunctionStr(node: AstNode, clzCnt: ClassContext, addFunc?: boolean, 
     const children = node.children;
     let ident = "";
     let name: string;
-    let retType: string = "";
+    let retNode: AstNode;
     let params = [] as string[];
     let block: AstNode;
     let isStatic: boolean;
@@ -997,7 +997,7 @@ function getFunctionStr(node: AstNode, clzCnt: ClassContext, addFunc?: boolean, 
             if (!name) {
                 name = solveIdentifierValue(child.value);
             } else {
-                retType = getTSType(checkAddThis(child, clzCnt));
+                retNode = child;
             }
         } else if (type === NodeName.ContainerNode) {//处理参数
             let subs = child.children;
@@ -1007,12 +1007,10 @@ function getFunctionStr(node: AstNode, clzCnt: ClassContext, addFunc?: boolean, 
         } else if (type === NodeName.ScopedBlockNode) {
             block = child;
         } else if (type === NodeName.LanguageIdentifierNode) {
-            retType = getTSType(solveIdentifierValue(child.value));
+            retNode = child;
         }
     }
-    if (retType) {
-        retType = ":" + retType;
-    }
+
     let override = "";
     if (isOverride) {
         override = "override ";
@@ -1022,11 +1020,21 @@ function getFunctionStr(node: AstNode, clzCnt: ClassContext, addFunc?: boolean, 
     if (addFunc) {
         funcStr = "function "
     }
-    let v = isConstructor ? `constructor(${paramsStr})` : `${getBlank(node)}${ident}${override}${getStaticString(isStatic)}${funcStr}${name} (${paramsStr})${retType} `;
+
+    let blockStr = "";
     if (block) {
-        v += getBlockStr(block, clzCnt);
+        blockStr = getBlockStr(block, clzCnt);
     }
-    return v;
+    if (blockStr) {
+        retNode = undefined;
+    }
+
+    let retType = "";
+    if (retNode) {
+        retType = ": " + getTSType(checkAddThis(retNode, clzCnt));
+    }
+    let v = isConstructor ? `constructor(${paramsStr})` : `${getBlank(node)}${ident}${override}${getStaticString(isStatic)}${funcStr}${name} (${paramsStr})`;
+    return v + retType + blockStr;
 }
 
 
@@ -1036,7 +1044,6 @@ function getSetterStr(node: AstNode, clzCnt: ClassContext) {
     let ident = "";
     let isStatic = false;
     let name = "";
-    let retType = "";
     let block: AstNode;
     let paramString = "";
     for (let i = 0; i < children.length; i++) {
@@ -1052,8 +1059,6 @@ function getSetterStr(node: AstNode, clzCnt: ClassContext) {
         } else if (type === NodeName.IdentifierNode) {//关键字
             if (!name) {
                 name = solveIdentifierValue(child.value);
-            } else {
-                retType = getTSType(checkAddThis(child, clzCnt));
             }
         } else if (type === NodeName.ScopedBlockNode) {
             block = child;
@@ -1062,14 +1067,10 @@ function getSetterStr(node: AstNode, clzCnt: ClassContext) {
             if (sub.type === NodeName.ParameterNode) {
                 paramString = getParamNodeString(sub, clzCnt);
             }
-        } else if (type === NodeName.LanguageIdentifierNode) {
-            retType = getTSType(solveIdentifierValue(child.value));
         }
     }
-    if (retType) {
-        retType = ":" + retType;
-    }
-    let v = `${getBlank(node)}${ident}${getStaticString(isStatic)}set ${name} (${paramString})${retType} `;
+
+    let v = `${getBlank(node)}${ident}${getStaticString(isStatic)}set ${name} (${paramString}) `;
     if (block) {
         v += getBlockStr(block, clzCnt);
     }
@@ -1082,7 +1083,7 @@ function getGetterStr(node: AstNode, clzCnt: ClassContext) {
     let ident = "";
     let isStatic = false;
     let name = "";
-    let retType = "";
+    let retNode: AstNode;
     let block: AstNode;
     for (let i = 0; i < children.length; i++) {
         const child = children[i];
@@ -1098,22 +1099,28 @@ function getGetterStr(node: AstNode, clzCnt: ClassContext) {
             if (!name) {
                 name = solveIdentifierValue(child.value);
             } else {
-                retType = getTSType(solveIdentifierValue(child.value));
+                retNode = child;
             }
         } else if (type === NodeName.ScopedBlockNode) {
             block = child;
         } else if (type === NodeName.LanguageIdentifierNode) {
-            retType = getTSType(solveIdentifierValue(child.value));
+            retNode = child;
         }
     }
-    if (retType) {
-        retType = ":" + retType;
-    }
-    let v = `${getBlank(node)}${ident}${getStaticString(isStatic)}get ${name} ()${retType} `;
+
+    let blockStr = "";
     if (block) {
-        v += getBlockStr(block, clzCnt);
+        blockStr = getBlockStr(block, clzCnt);
     }
-    return v;
+    if (blockStr) {
+        retNode = undefined;
+    }
+
+    let retType = "";
+    if (retNode) {
+        retType = ": " + getTSType(checkAddThis(retNode, clzCnt));
+    }
+    return `${getBlank(node)}${ident}${getStaticString(isStatic)}get ${name} ()${retType}${blockStr}`;
 }
 
 
@@ -1304,13 +1311,13 @@ function getLabelStr(node: AstNode, clzCnt: ClassContext) {
 
 function getUnaryRightStr(node: AstNode, clzCnt: ClassContext, right: string) {
     const child = node.children[0];
-    let v = getNodeStr(child, clzCnt);
+    let v = checkAddThis(child, clzCnt);
     return `${v}${right} `;
 }
 
 function getUnaryLeftStr(node: AstNode, clzCnt: ClassContext, left: string) {
     const child = node.children[0];
-    let v = getNodeStr(child, clzCnt);
+    let v = checkAddThis(child, clzCnt);
     return `${left}${v} `;
 }
 
