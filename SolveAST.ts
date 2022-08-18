@@ -671,7 +671,7 @@ function getNodeStr(node: AstNode, clzCnt: ClassContext) {
             return getLeftRightStr(node, clzCnt, " in ");
         case NodeName.BinaryOperatorInstanceOfNode:
         case NodeName.BinaryOperatorIsNode:
-            return getLeftRightStr(node, clzCnt, " instanceof ");
+            return getInstanceOfStr(node, clzCnt);
         case NodeName.BinaryOperatorAssignmentNode:
             return getLeftRightStr(node, clzCnt, " = ");
         //============ BinaryOperatorMath =================
@@ -1280,5 +1280,32 @@ function getSwitchStr(node: AstNode, clzCnt: ClassContext) {
         v += getNodeStr(cnt, clzCnt) + "\n";
     }
     v += "}";
+    return v;
+}
+
+const typeofValue = {
+    "Number": "number",
+    "int": "number",
+    "Object": "object",
+    "String": "string",
+    "Boolean": "boolean",
+} as { [key: string]: string }
+function getInstanceOfStr(node: AstNode, clzCnt: ClassContext) {
+    const children = node.children;
+    const [leftNode, rightNode] = children;
+    let v = "";
+    let flag = true;
+    if (rightNode.type === NodeName.IdentifierNode) {
+        //检查是否为基本类型
+        let t = typeofValue[solveIdentifierValue(rightNode.value)]
+        if (t) {
+            v = `typeof ${checkAddThis(leftNode, clzCnt)} === "${t}"`;
+            flag = false;
+        }
+    }
+
+    if (flag) {
+        v = getLeftRightStr(node, clzCnt, " instanceof ");
+    }
     return v;
 }
