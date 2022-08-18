@@ -12,6 +12,12 @@ type FileContext = {
 
 type FileData = ReturnType<typeof getFile>;
 
+interface PackageScope {
+    clzs: { [name: string]: ClassData };
+    ints: { [name: string]: AstNode };
+    other: AstNode[];
+}
+
 function getFile(file: string, node: AstNode, baseDir: string) {
     //全部以 baseDir 的相对路径创建 key
     const p = path.relative(baseDir, file)
@@ -34,13 +40,15 @@ function getFile(file: string, node: AstNode, baseDir: string) {
      * 这种带`*`的import
      */
     const impStars = [] as string[];
-    const clzs = {} as { [name: string]: ClassData };
     const nodeChildren = node.children;
     //解析import节点
     const packageNode = nodeChildren[0];
 
-    const ints = {} as { [name: string]: AstNode };
-    const other = [] as AstNode[];
+    const inPackage = {
+        clzs: {} as { [name: string]: ClassData },
+        ints: {} as { [name: string]: AstNode },
+        other: [] as AstNode[]
+    } as PackageScope;
     let scope: AstNode;
     if (packageNode) {
         scope = packageNode.children[1];
@@ -51,30 +59,18 @@ function getFile(file: string, node: AstNode, baseDir: string) {
             for (let i = 0; i < children.length; i++) {
                 //检查
                 const node = children[i];
-                const nodeType = node.type;
-                if (nodeType === NodeName.ImportNode) {
-                    const imp = solveIdentifierValue(node.value);
-                    if (imp.slice(-1) === "*") {
-                        impStars.push(imp.slice(0, -2));
-                    } else {
-                        imps.push(imp);
-                    }
-                } else if (nodeType === NodeName.ClassNode) {
-                    const cData = getClassData(node);
-                    clzs[cData.name] = cData;
-                } else if (nodeType === NodeName.InterfaceNode) {
-                    const name = solveIdentifierValue(node.value);
-                    ints[name] = node;
-                } else {
-                    other.push(node);
-                }
+                checkChild(node, inPackage);
             }
         }
     }
-
+    const outPackage = {
+        clzs: {} as { [name: string]: ClassData },
+        ints: {} as { [name: string]: AstNode },
+        other: [] as AstNode[]
+    } as PackageScope;
     for (let i = 1; i < nodeChildren.length; i++) {
         const node = nodeChildren[i];
-        other.push(node);
+        checkChild(node, outPackage);
     }
     return {
         name,
@@ -86,9 +82,27 @@ function getFile(file: string, node: AstNode, baseDir: string) {
         imps,
         impStars,
         scope,
-        ints,
-        clzs,
-        other,
+        inPackage,
+        outPackage
+    }
+    function checkChild(node: AstNode, { clzs, ints, other }: PackageScope) {
+        const nodeType = node.type;
+        if (nodeType === NodeName.ImportNode) {
+            const imp = solveIdentifierValue(node.value);
+            if (imp.slice(-1) === "*") {
+                impStars.push(imp.slice(0, -2));
+            } else {
+                imps.push(imp);
+            }
+        } else if (nodeType === NodeName.ClassNode) {
+            const cData = getClassData(node);
+            clzs[cData.name] = cData;
+        } else if (nodeType === NodeName.InterfaceNode) {
+            const name = solveIdentifierValue(node.value);
+            ints[name] = node;
+        } else {
+            other.push(node);
+        }
     }
 
 }
@@ -155,7 +169,7 @@ function getBlank(node: AstNode, plus = 0) {
 }
 
 async function solveFileNode(data: FileData, cnt: FileContext) {
-    const { clzs, ints, imps, impStars, pkg, file, name: fileName, other } = data;
+    const { imps, impStars, pkg, file, name: fileName, inPackage, outPackage } = data;
     const content = await fs.promises.readFile(file, "utf-8");
     const { pkgDict, uriDict, nameDict } = cnt;
 
@@ -176,7 +190,7 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
         if (list) {
             for (let i = 0; i < list.length; i++) {
                 const dat = list[i];
-                const clzs = dat.clzs;
+                const clzs = dat.inPackage.clzs;
                 const pkg = dat.pkg;
                 for (let name in clzs) {
                     impDict[name] = { pkg, name, fullName: `${pkg}.${name}`, count: 0 };
@@ -189,13 +203,20 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
 
     let v = "";
 
-    for (let className in clzs) {
-        v += solveClass(clzs[className]);
-    }
+    const otherCnt = {
+        name: "",
+        staticDict: {},
+        baseStaticDict: {},
+        content,
+        dict: {},
+        baseDict: {},
+        impDict
+    };
+    v = solvePackageScope(v, inPackage, true);
+    v = solvePackageScope(v, outPackage, false);
 
-    for (let interName in ints) {
-        v += solveInterface(ints[interName]);
-    }
+
+
 
     //将引用计数非 0 的 imp 放到文件头
     for (let name in impDict) {
@@ -213,22 +234,28 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
         }
     }
 
-    const otherCnt = {
-        name: "",
-        staticDict: {},
-        baseStaticDict: {},
-        content,
-        dict: {},
-        baseDict: {},
-        impDict
-    };
 
-    for (let i = 0; i < other.length; i++) {
-        const node = other[i];
-        v += "\n" + getNodeStr(node, otherCnt);
-    }
+
 
     return v;
+    function solvePackageScope(v: string, scope: PackageScope, exp: boolean) {
+
+        const { clzs, ints, other } = scope;
+        for (let className in clzs) {
+            v += solveClass(clzs[className], exp) + "\n";
+        }
+
+        for (let interName in ints) {
+            v += solveInterface(ints[interName], exp) + "\n";
+        }
+
+
+        for (let i = 0; i < other.length; i++) {
+            const node = other[i];
+            v += getNodeStr(node, otherCnt) + "\n";
+        }
+        return v;
+    }
     function getBaseDict(data: ClassData, dict: { [name: string]: true }, staticDict: { [name: string]: true }) {
         const baseClass = data.baseClass;
         if (baseClass) {
@@ -236,7 +263,7 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
             const fileDat = nameDict[baseClass]
 
             if (fileDat) {
-                const baseClassData = fileDat.clzs[baseClass];
+                const baseClassData = fileDat.inPackage.clzs[baseClass];
                 if (baseClassData) {
                     const baseDict = baseClassData.dict;
                     for (let na in baseDict) {
@@ -259,7 +286,7 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
     }
 
 
-    function solveClass(classData: ClassData) {
+    function solveClass(classData: ClassData, exp: boolean) {
         const { baseClass, dict, staticDict, others, constructors, name, setterDict, node } = classData;
         let baseClassStr = "";
         let baseDict = {} as { [name: string]: true };
@@ -285,9 +312,11 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
         }
 
         const lines = [] as string[];
-
-
-        lines.push(`export class ${name}${baseClassStr}${implStr} {`);
+        let expStr = "";
+        if (exp) {
+            expStr = "export "
+        }
+        lines.push(`${expStr}class ${name}${baseClassStr}${implStr} {`);
 
         if (baseClass) {
             checkImp(baseClass, impDict);
@@ -385,7 +414,7 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
 
     }
 
-    function solveInterface(node: AstNode) {
+    function solveInterface(node: AstNode, exp: boolean) {
         const children = node.children;
         const lines = [] as string[];
         let name = solveIdentifierValue(node.value);
@@ -404,7 +433,11 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
 
         let scopeIdx = getChildIdx(children, extIdx, NodeName.ScopedBlockNode);
         let scope = children[scopeIdx];
-        lines.push(`export interface ${name}${baseClassStr} {`);
+        let expStr = "";
+        if (exp) {
+            expStr = "export "
+        }
+        lines.push(`${expStr}interface ${name}${baseClassStr} {`);
         const cnt = {
             name,
             staticDict: {},
