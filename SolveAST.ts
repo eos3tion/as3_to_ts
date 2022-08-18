@@ -35,10 +35,12 @@ function getFile(file: string, node: AstNode, baseDir: string) {
      */
     const impStars = [] as string[];
     const clzs = {} as { [name: string]: ClassData };
+    const nodeChildren = node.children;
     //解析import节点
-    const packageNode = node.children[0];
+    const packageNode = nodeChildren[0];
 
     const ints = {} as { [name: string]: AstNode };
+    const other = [] as AstNode[];
     let scope: AstNode;
     if (packageNode) {
         scope = packageNode.children[1];
@@ -63,12 +65,16 @@ function getFile(file: string, node: AstNode, baseDir: string) {
                 } else if (nodeType === NodeName.InterfaceNode) {
                     const name = solveIdentifierValue(node.value);
                     ints[name] = node;
+                } else {
+                    other.push(node);
                 }
             }
         }
     }
-    if (node.children.length > 1) {
-        console.error(`暂不支持package外部写代码，请检查[${file}]`);
+
+    for (let i = 1; i < nodeChildren.length; i++) {
+        const node = nodeChildren[i];
+        other.push(node);
     }
     return {
         name,
@@ -81,7 +87,8 @@ function getFile(file: string, node: AstNode, baseDir: string) {
         impStars,
         scope,
         ints,
-        clzs
+        clzs,
+        other,
     }
 
 }
@@ -148,7 +155,7 @@ function getBlank(node: AstNode, plus = 0) {
 }
 
 async function solveFileNode(data: FileData, cnt: FileContext) {
-    const { clzs, ints, imps, impStars, pkg, file, name: fileName } = data;
+    const { clzs, ints, imps, impStars, pkg, file, name: fileName, other } = data;
     const content = await fs.promises.readFile(file, "utf-8");
     const { pkgDict, uriDict, nameDict } = cnt;
 
@@ -204,6 +211,21 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
                 v = `import {${name}} from "${rela}"\n` + v;
             }
         }
+    }
+
+    const otherCnt = {
+        name: "",
+        staticDict: {},
+        baseStaticDict: {},
+        content,
+        dict: {},
+        baseDict: {},
+        impDict
+    };
+
+    for (let i = 0; i < other.length; i++) {
+        const node = other[i];
+        v += "\n" + getNodeStr(node, otherCnt);
     }
 
     return v;
