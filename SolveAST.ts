@@ -229,6 +229,10 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
                 if (!rela.startsWith(".")) {
                     rela = "./" + rela;
                 }
+                //laya路径特殊处理
+                //laya的as3项目目录结构为`libs/laya/src/`，而ts项目为`libs`
+                rela = rela.replace("laya/src/", "");
+
                 v = `import {${name}} from "${rela}"\n` + v;
             }
         }
