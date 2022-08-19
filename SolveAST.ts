@@ -190,9 +190,12 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
         if (list) {
             for (let i = 0; i < list.length; i++) {
                 const dat = list[i];
-                const clzs = dat.inPackage.clzs;
+                const { clzs, ints } = dat.inPackage;
                 const pkg = dat.pkg;
                 for (let name in clzs) {
+                    impDict[name] = { pkg, name, fullName: `${pkg}.${name}`, count: 0 };
+                }
+                for (let name in ints) {
                     impDict[name] = { pkg, name, fullName: `${pkg}.${name}`, count: 0 };
                 }
             }
