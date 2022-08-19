@@ -153,7 +153,11 @@ export async function solveAst(dict: { [file: string]: AstNode }, callback: { (f
     for (const file in dict) {
         if (filter(file)) {
             const dat = fileDict[file];
-            await solveFileNode(dat, context).then(v => callback(file, v));
+            try {
+                await solveFileNode(dat, context).then(v => callback(file, v));
+            } catch (e) {
+                console.log(`处理[${file}]出错：\n`, e)
+            }
         }
     }
 }
@@ -726,6 +730,10 @@ function getNodeStr(node: AstNode, clzCnt: ClassContext): string {
             return getDynamicAccessStr(node, clzCnt);
         case NodeName.FunctionObjectNode:
             return getFunctionStr(node.children[0], clzCnt, true);
+        case NodeName.FunctionNode:
+            return getFunctionStr(node, clzCnt);
+        case NodeName.ChainedVariableNode:
+            return getChainVarStr(node, clzCnt);
         //========== BinaryOperator ==================================
         case NodeName.BinaryOperatorCommaNode:
             return getLeftRightStr(node, clzCnt, ", ");
@@ -847,6 +855,8 @@ function getNodeStr(node: AstNode, clzCnt: ClassContext): string {
         case NodeName.ContainerNode:
             return getConStr(node, clzCnt);
         //========流程控制====================
+        case NodeName.ThrowNode:
+            return getThrowStr(node, clzCnt);
         case NodeName.TryNode:
             return getTryStr(node, clzCnt);
         case NodeName.CatchNode:
@@ -1267,13 +1277,22 @@ function getFuncCallStr(node: AstNode, clzCnt: ClassContext) {
     } else {
         let i = 0;
         let child = children[i];
+        let isNew = false;
         if (child.type === NodeName.KeywordNode) {// new
             v = "new ";
+            isNew = true;
             i++;
         }
         let nameNode = children[i++];
-        v += checkAddThis(nameNode, clzCnt);
-        v += `(${getConStr(children[i], clzCnt, ",")})`;
+        let name = checkAddThis(nameNode, clzCnt);
+        v += name;
+        const conNode = children[i++];
+        if (isNew && nameNode.type === NodeName.TypedExpressionNode && conNode.children.length > 1) {//as3 new Vector只有2个参数，第一个是长度，第二个为是否是固定长度的参数
+            const lenNode = conNode.children[0];
+            v += `(${checkAddThis(lenNode, clzCnt)})`
+        } else {
+            v += `(${getConStr(conNode, clzCnt, ",")})`;
+        }
     }
     return v;
 }
@@ -1403,4 +1422,8 @@ function getInstanceOfStr(node: AstNode, clzCnt: ClassContext) {
         v = getLeftRightStr(node, clzCnt, " instanceof ");
     }
     return v;
+}
+
+function getThrowStr(node: AstNode, clzCnt: ClassContext) {
+    return "throw " + checkAddThis(node.children[0], clzCnt);
 }
