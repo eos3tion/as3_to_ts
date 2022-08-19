@@ -340,7 +340,7 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
         }
         for (let i = 0; i < constructors.length; i++) {
             const constuctor = constructors[i];
-            lines.push(getFunctionStr(constuctor, clzCnt, false, true));
+            lines.push(getFunctionStr(constuctor, clzCnt, false, true, baseClassStr !== ""));
             lines.push("");
         }
         //检查 block 中`属性 / 方法`的引用，是否需要加 `this.`
@@ -974,7 +974,7 @@ function getDoWhileLoopStr(node: AstNode, clzCnt: ClassContext) {
     return `do${getBlockStr(contentNode, clzCnt)}while(${getNodeStr(conditionNode, clzCnt)}) `
 }
 
-function getFunctionStr(node: AstNode, clzCnt: ClassContext, addFunc?: boolean, isConstructor?: boolean) {
+function getFunctionStr(node: AstNode, clzCnt: ClassContext, addFunc?: boolean, isConstructor?: boolean, addSuper?: boolean) {
     const children = node.children;
     let ident = "";
     let name: string;
@@ -1032,7 +1032,7 @@ function getFunctionStr(node: AstNode, clzCnt: ClassContext, addFunc?: boolean, 
 
     let blockStr = "";
     if (block) {
-        blockStr = getBlockStr(block, clzCnt);
+        blockStr = getBlockStr(block, clzCnt, isConstructor && addSuper);
     }
     if (blockStr) {
         retNode = undefined;
@@ -1195,7 +1195,7 @@ function getVecStr(node: AstNode, clzCnt: ClassContext) {
     return v;
 }
 
-function getBlockStr(node: AstNode, clzCnt: ClassContext) {
+function getBlockStr(node: AstNode, clzCnt: ClassContext, addSuper?: boolean) {
     let isSynthesized = node.value === "SYNTHESIZED";
 
     let lines = [] as string[];
@@ -1203,13 +1203,25 @@ function getBlockStr(node: AstNode, clzCnt: ClassContext) {
         lines.push("{");
     }
     const children = node.children;
+    let hasAddSuper = false;
     for (let i = 0; i < children.length; i++) {
         const child = children[i];
+        let v = getNodeStr(child, clzCnt);
+        if (addSuper) {
+            if (v.indexOf("super()") > -1) {
+                hasAddSuper = true;
+            }
+        }
         lines.push(getNodeStr(child, clzCnt));
     }
+
     if (!isSynthesized) {
         lines.push("}");
     }
+    if (addSuper && !hasAddSuper) {
+        lines.splice(1, 0, "super();");
+    }
+    //检查是否需要附加`super()`
     return lines.join("\n");
 }
 
