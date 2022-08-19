@@ -130,13 +130,28 @@ function getFunctionName(node: AstNode) {
     }
 }
 
+function getParamName(param: AstNode) {
+    const paramNameNode = param.children[0];
+    return solveIdentifierValue(paramNameNode.value);
+}
+
 export function checkFunctionScope(node: AstNode) {
     let scope = getFunctionScope(node);
     if (!scope) {
         return
     }
-    const children = scope.children;
     const dict = {} as ClassDict;
+    const paramNodes = getParamNodes(node);
+    if (paramNodes) {
+        for (let i = 0; i < paramNodes.length; i++) {
+            const param = paramNodes[i];
+            let name = getParamName(param);
+            if (name) {
+                dict[name] = param;
+            }
+        }
+    }
+    const children = scope.children;
     for (let i = 0; i < children.length; i++) {
         const child = children[i];
         let name: string;
@@ -161,6 +176,13 @@ function getFunctionScope(child: AstNode) {
     let scopeIdx = getChildIdx(funChildren, 0, NodeName.ScopedBlockNode);
     let scope = funChildren[scopeIdx];
     return scope as FunctionScopeNode;
+}
+
+function getParamNodes(child: AstNode) {
+    const funChildren = child.children;
+    let conIdx = getChildIdx(funChildren, 0, NodeName.ContainerNode);
+    const conNode = funChildren[conIdx];
+    return conNode?.children;
 }
 
 export function isScopeNode(node: AstNode): node is FunctionScopeNode {
