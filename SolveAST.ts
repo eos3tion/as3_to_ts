@@ -691,7 +691,7 @@ function getMemberAccessExpressionNodeStr(node: AstNode, clzCnt: ClassContext) {
     return `${left}.${right}`;
 }
 
-function getNodeStr(node: AstNode, clzCnt: ClassContext) {
+function getNodeStr(node: AstNode, clzCnt: ClassContext): string {
     switch (node.type) {
         case NodeName.MemberAccessExpressionNode:
             return getMemberAccessExpressionNodeStr(node, clzCnt);
@@ -869,6 +869,9 @@ function getNodeStr(node: AstNode, clzCnt: ClassContext) {
             return getDoWhileLoopStr(node, clzCnt);
         case NodeName.SwitchNode:
             return getSwitchStr(node, clzCnt);
+        default:
+            console.log(`未处理的类型：[${node.type}]`)
+            return "";
     }
 }
 
