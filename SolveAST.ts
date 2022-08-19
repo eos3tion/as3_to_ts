@@ -718,8 +718,6 @@ function getNodeStr(node: AstNode, clzCnt: ClassContext) {
             return solveIdentifierValue(node.value);
         case NodeName.IdentifierNode://变量那些，最好不走这个，没法判断是否加`this`
             return solveIdentifierValue(node.value);
-        case NodeName.ChainedVariableNode:
-            return getChainVarStr(node, clzCnt);
         case NodeName.TypedExpressionNode:
             return getTypedExpressStr(node, clzCnt);
         case NodeName.DynamicAccessNode:
@@ -878,7 +876,7 @@ function getVarStr(node: AstNode, clzCnt: ClassContext, isClass?: boolean) {
     let find = 0;
     let isConst = false;
     let isStatic = false;
-
+    let chains = [] as AstNode[];
     for (let i = 0; i < children.length; i++) {
         const child = children[i];
         const type = child.type;
@@ -893,8 +891,11 @@ function getVarStr(node: AstNode, clzCnt: ClassContext, isClass?: boolean) {
             if (child.value === `"const"`) {
                 isConst = true;
             }
-            find = i + 1;
-            break;
+            if (!find) {
+                find = i + 1;
+            }
+        } else if (type === NodeName.ChainedVariableNode) {
+            chains.push(child);
         }
     }
     let val = "";
@@ -916,12 +917,18 @@ function getVarStr(node: AstNode, clzCnt: ClassContext, isClass?: boolean) {
     } else {
         v = val + v;//使用 `var` 不用 `let`，`as3`的`var`作用域和`js`一致
     }
+    if (chains.length > 0) {
+        for (let i = 0; i < chains.length; i++) {
+            const child = chains[i];
+            v += getChainVarStr(child, clzCnt);
+        }
+    }
     return v;
 }
 
 function getChainVarStr(node: AstNode, clzCnt: ClassContext) {
     const [nameNode, typeNode, defaultNode] = node.children;
-    return ", " + solveParam(nameNode, typeNode, defaultNode, clzCnt, false) + "\n";
+    return ", " + solveParam(nameNode, typeNode, defaultNode, clzCnt, false);
 }
 
 
@@ -1177,7 +1184,7 @@ function getTypedExpressStr(node: AstNode, clzCnt: ClassContext) {
             type = getNodeStr(typeNode, clzCnt);
         }
     }
-    return `Array < ${type}> `;
+    return `Array<${type}> `;
 }
 
 function getVecStr(node: AstNode, clzCnt: ClassContext) {
@@ -1190,7 +1197,7 @@ function getVecStr(node: AstNode, clzCnt: ClassContext) {
             const child = children[i];
             lines.push(getNodeStr(child, clzCnt));
         }
-        v = `Array < ${getTSType(solveIdentifierValue(idNode.value))}> (${lines.join(", ")})`;
+        v = `Array<${getTSType(solveIdentifierValue(idNode.value))}>(${lines.join(", ")})`;
     }
     return v;
 }
