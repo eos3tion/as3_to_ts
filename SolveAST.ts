@@ -541,7 +541,7 @@ function solveParam(paramNameNode: AstNode, paramTypeNode: AstNode, defaultNode:
     let defStr = "";
     let optStr = "";
     if (defaultNode && !clzCnt.isInterface) {
-        let val = getNodeStr(defaultNode, clzCnt);
+        let val = checkAddThis(defaultNode, clzCnt);
         if (val) {
             if (val === "null" || val === "undefined" || val === "void 0") {
                 if (addOpt) {
