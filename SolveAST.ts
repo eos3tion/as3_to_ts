@@ -1221,7 +1221,7 @@ function getBlockStr(node: AstNode, clzCnt: ClassContext, addSuper?: boolean) {
         const child = children[i];
         let v = getNodeStr(child, clzCnt);
         if (addSuper) {
-            if (v.indexOf("super()") > -1) {
+            if (v.indexOf("super(") > -1) {
                 hasAddSuper = true;
             }
         }
