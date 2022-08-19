@@ -546,12 +546,14 @@ function solveParam(paramNameNode: AstNode, paramTypeNode: AstNode, defaultNode:
     let optStr = "";
     if (defaultNode && !clzCnt.isInterface) {
         let val = getNodeStr(defaultNode, clzCnt);
-        if (val === "null" || val === "undefined" || val === "void 0") {
-            if (addOpt) {
-                optStr = "?";
+        if (val) {
+            if (val === "null" || val === "undefined" || val === "void 0") {
+                if (addOpt) {
+                    optStr = "?";
+                }
+            } else {
+                defStr = ` = ${val}`;
             }
-        } else {
-            defStr = ` = ${val}`;
         }
     }
     return `${solveIdentifierValue(paramNameNode.value)}${optStr}:${getTSType(typeStr)}${defStr}`;
