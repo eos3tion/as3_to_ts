@@ -449,7 +449,8 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
             content,
             dict: {},
             baseDict: {},
-            impDict
+            impDict,
+            isInterface: true,
         };
         if (scope) {
             const children = scope.children;
@@ -501,6 +502,7 @@ interface ClassContext {
     baseDict: { [name: string]: true };
     impDict: { [name: string]: ImpRefs }
     content: string;
+    isInterface?: boolean;
 }
 
 
@@ -539,7 +541,7 @@ function solveParam(paramNameNode: AstNode, paramTypeNode: AstNode, defaultNode:
     let typeStr = checkAddThis(paramTypeNode, clzCnt);
     let defStr = "";
     let optStr = "";
-    if (defaultNode) {
+    if (defaultNode && !clzCnt.isInterface) {
         let val = getNodeStr(defaultNode, clzCnt);
         if (val === "null" || val === "undefined" || val === "void 0") {
             if (addOpt) {
