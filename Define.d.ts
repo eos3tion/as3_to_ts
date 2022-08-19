@@ -494,6 +494,10 @@ const enum NodeName {
      */
     UnaryOperatorDeleteNode = "UnaryOperatorDeleteNode",
     /**
+     * throw
+     */
+    ThrowNode = "ThrowNode",
+    /**
      * try{
      * }catch(e){
      * }
