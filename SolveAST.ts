@@ -960,7 +960,22 @@ function getForLoopStr(node: AstNode, clzCnt: ClassContext) {
     if (id === NodeID.ForEachLoopID) {
         //for each(A in B) -> for(A of B)
         const nodeIn = conditionNode.children[0];
-        return `for (${getLeftRightStr(nodeIn, clzCnt, " of ")})${getBlockStr(contentNode, clzCnt)} `;
+        const [varExpNode, listNode] = nodeIn.children;
+        let varStr = "";
+        let nameNode: AstNode;
+        if (varExpNode.type === NodeName.VariableExpressionNode) {
+            const varChildren = varExpNode.children[0].children;
+            const first = varChildren[0];
+            nameNode = first;
+            if (first.type === NodeName.KeywordNode) {
+                varStr = "var "
+                nameNode = varChildren[1];
+            }
+        } else {
+            nameNode = varExpNode;
+        }
+        const name = solveIdentifierValue(nameNode.value);
+        return `for (${varStr}${name} of ${checkAddThis(listNode, clzCnt)})${getBlockStr(contentNode, clzCnt)} `;
 
     } else {//当 ForLoopID 处理 
         //检查是for(var a in b)还是 for(var i=0;i<n;i++);
