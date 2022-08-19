@@ -2,6 +2,7 @@ import { readAstFile } from "./ParseAST";
 import { solveAst } from "./SolveAST";
 import fs from "fs";
 import path from "path";
+import { formatContent } from "./FormatTsContent";
 
 const inputBaseDir = "D:\\workspace\\projects\\wallan2022\\chuanqi\\chuanqi-laya-as3";
 const outDir = "D:\\workspace\\projects\\wallan2022\\chuanqi\\ts";
@@ -34,6 +35,6 @@ readAstFile("ast1.txt", dict => {
     solveAst(dict, (file, cnt) => {
         const p = path.join(outDir, path.relative(inputBaseDir, file).replace(".as", ".ts"));
         mkdirs(path.dirname(p));
-        fs.writeFileSync(p, cnt);
+        fs.writeFileSync(p, formatContent(cnt));
     }, inputBaseDir, file => file.indexOf("libs\\laya") == -1)
 })

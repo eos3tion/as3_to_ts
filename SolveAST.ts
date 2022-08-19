@@ -163,14 +163,6 @@ export async function solveAst(dict: { [file: string]: AstNode }, callback: { (f
 }
 
 
-function getBlank(node: AstNode, plus = 0) {
-    const level = node.level + plus;
-    let v = "";
-    for (let i = 0; i < level; i++) {
-        v += "\t";
-    }
-    return v;
-}
 
 async function solveFileNode(data: FileData, cnt: FileContext) {
     const { imps, impStars, pkg, file, name: fileName, inPackage, outPackage } = data;
@@ -667,7 +659,6 @@ function getTernaryStr(node: AstNode, clzCnt: ClassContext) {
 function getIfNodeStr(node: AstNode, clzCnt: ClassContext) {
     let lines = [] as string[];
     const children = node.children;
-    let mainBlank = getBlank(node);
     for (let i = 0; i < children.length; i++) {
         const child = children[i];
         if (child.type === NodeName.ConditionalNode) {//children只能是ConditionNode
@@ -677,7 +668,7 @@ function getIfNodeStr(node: AstNode, clzCnt: ClassContext) {
             if (subs.length === 2) {
                 let [con, cnt] = subs;
                 let prefix = i === 0 ? "if" : "else if";
-                lines.push(`${mainBlank}${prefix} (${checkAddThis(con, clzCnt)})`);
+                lines.push(`${prefix} (${checkAddThis(con, clzCnt)})`);
                 lines.push(getNodeStr(cnt, clzCnt));
             } else {
                 console.log(`条件节点没有2个子节点`, child);
@@ -955,7 +946,7 @@ function getChainVarStr(node: AstNode, clzCnt: ClassContext) {
  */
 function getReturnStr(node: AstNode, clzCnt: ClassContext) {
     const children = node.children;
-    let v = `${getBlank(node)} return `;
+    let v = `return `;
     for (let i = 0; i < children.length; i++) {
         const child = children[i];
         v += checkAddThis(child, clzCnt);
@@ -1064,7 +1055,7 @@ function getFunctionStr(node: AstNode, clzCnt: ClassContext, addFunc?: boolean, 
     if (retNode) {
         retType = ": " + getTSType(checkAddThis(retNode, clzCnt));
     }
-    let v = isConstructor ? `constructor(${paramsStr})` : `${getBlank(node)}${ident}${override}${getStaticString(isStatic)}${funcStr}${name} (${paramsStr})`;
+    let v = isConstructor ? `constructor(${paramsStr})` : `${ident}${override}${getStaticString(isStatic)}${funcStr}${name} (${paramsStr})`;
     return v + retType + blockStr;
 }
 
@@ -1101,7 +1092,7 @@ function getSetterStr(node: AstNode, clzCnt: ClassContext) {
         }
     }
 
-    let v = `${getBlank(node)}${ident}${getStaticString(isStatic)}set ${name} (${paramString}) `;
+    let v = `${ident}${getStaticString(isStatic)}set ${name} (${paramString}) `;
     if (block) {
         v += getBlockStr(block, clzCnt);
     }
@@ -1151,7 +1142,7 @@ function getGetterStr(node: AstNode, clzCnt: ClassContext) {
     if (retNode) {
         retType = ": " + getTSType(checkAddThis(retNode, clzCnt));
     }
-    return `${getBlank(node)}${ident}${getStaticString(isStatic)}get ${name} ()${retType}${blockStr}`;
+    return `${ident}${getStaticString(isStatic)}get ${name} ()${retType}${blockStr}`;
 }
 
 
