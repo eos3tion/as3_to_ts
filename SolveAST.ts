@@ -732,13 +732,11 @@ function getNodeStr(node: AstNode, clzCnt: ClassContext): string {
             return getFunctionStr(node.children[0], clzCnt, true);
         case NodeName.FunctionNode:
             return getFunctionStr(node, clzCnt);
-        case NodeName.ChainedVariableNode:
-            return getChainVarStr(node, clzCnt);
         //========== BinaryOperator ==================================
         case NodeName.BinaryOperatorCommaNode:
             return getLeftRightStr(node, clzCnt, ", ");
         case NodeName.BinaryOperatorAsNode:
-            return getLeftRightStr(node, clzCnt, " as ");
+            return `(${getLeftRightStr(node, clzCnt, " as ")})`;
         case NodeName.BinaryOperatorInNode:
             return getLeftRightStr(node, clzCnt, " in ");
         case NodeName.BinaryOperatorInstanceOfNode:
@@ -924,8 +922,10 @@ function getVarStr(node: AstNode, clzCnt: ClassContext, isClass?: boolean) {
 
     const nameNode = children[find];
     const typeNode = children[find + 1];
-    const defaultNode = children[find + 2];
-
+    let defaultNode = children[find + 2];
+    if (defaultNode && defaultNode.type === NodeName.ChainedVariableNode) {
+        defaultNode = undefined;
+    }
     let v = solveParam(nameNode, typeNode, defaultNode, clzCnt, false);
     if (isClass) {
         v = ident + getStaticString(isStatic) + v;
