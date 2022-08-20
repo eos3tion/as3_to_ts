@@ -752,23 +752,23 @@ function getNodeStr(node: AstNode, clzCnt: ClassContext): string {
             return getAssignmentStr(node, clzCnt);
         //============ BinaryOperatorMath =================
         case NodeName.BinaryOperatorPlusNode:
-            return getLeftRightStr(node, clzCnt, " + ");
+            return getLeftRightStr(node, clzCnt, " + ", true);
         case NodeName.BinaryOperatorPlusAssignmentNode:
             return getLeftRightStr(node, clzCnt, " += ", true);
         case NodeName.BinaryOperatorMinusNode:
-            return getLeftRightStr(node, clzCnt, " - ");
+            return getLeftRightStr(node, clzCnt, " - ", true);
         case NodeName.BinaryOperatorMinusAssignmentNode:
             return getLeftRightStr(node, clzCnt, " -= ", true);
         case NodeName.BinaryOperatorMultiplicationNode:
-            return getLeftRightStr(node, clzCnt, " * ");
+            return getLeftRightStr(node, clzCnt, " * ", true);
         case NodeName.BinaryOperatorMultiplicationAssignmentNode:
             return getLeftRightStr(node, clzCnt, " *= ", true);
         case NodeName.BinaryOperatorDivisionNode:
-            return getLeftRightStr(node, clzCnt, " / ");
+            return getLeftRightStr(node, clzCnt, " / ", true);
         case NodeName.BinaryOperatorDivisionAssignmentNode:
             return getLeftRightStr(node, clzCnt, " /= ", true);
         case NodeName.BinaryOperatorModuloNode:
-            return getLeftRightStr(node, clzCnt, " % ");
+            return getLeftRightStr(node, clzCnt, " % ", true);
         case NodeName.BinaryOperatorModuloAssignmentNode:
             return getLeftRightStr(node, clzCnt, " %= ", true);
         //============ BinaryOperatorBitwise =================
@@ -787,7 +787,7 @@ function getNodeStr(node: AstNode, clzCnt: ClassContext): string {
         case NodeName.BinaryOperatorBitwiseRightShiftNode:
             return getLeftRightStr(node, clzCnt, " >> ", true);
         case NodeName.BinaryOperatorBitwiseRightShiftAssignmentNode:
-            return getLeftRightStr(node, clzCnt, " >>= ");
+            return getLeftRightStr(node, clzCnt, " >>= ", true);
         case NodeName.BinaryOperatorBitwiseUnsignedRightShiftNode:
             return getLeftRightStr(node, clzCnt, " >>> ", true);
         case NodeName.BinaryOperatorBitwiseUnsignedRightShiftAssignmentNode:
