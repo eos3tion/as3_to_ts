@@ -553,7 +553,10 @@ function solveParam(paramNameNode: AstNode, paramTypeNode: AstNode, defaultNode:
             }
         }
     }
-    return `${solveIdentifierValue(paramNameNode.value)}${optStr}:${getTSType(typeStr)}${defStr}`;
+    if (typeStr) {
+        typeStr = `: ${getTSType(typeStr)}`;
+    }
+    return `${solveIdentifierValue(paramNameNode.value)}${optStr}${typeStr}${defStr}`;
 }
 
 function getNamespaceIdent(node: AstNode) {
