@@ -1200,15 +1200,7 @@ function getArrStr(node: AstNode, clzCnt: ClassContext) {
 
 function getTypedExpressStr(node: AstNode, clzCnt: ClassContext) {
     const [_, typeNode] = node.children;
-    let type = "any";
-    if (typeNode) {
-        if (typeNode.type === NodeName.IdentifierNode) {
-            type = getTSType(solveIdentifierValue(typeNode.value));
-        } else {
-            type = getNodeStr(typeNode, clzCnt);
-        }
-    }
-    return `Array<${type}> `;
+    return `Array<${getArrayType(typeNode, clzCnt)}>`;
 }
 
 function getVecStr(node: AstNode, clzCnt: ClassContext) {
@@ -1221,9 +1213,23 @@ function getVecStr(node: AstNode, clzCnt: ClassContext) {
             const child = children[i];
             lines.push(getNodeStr(child, clzCnt));
         }
-        v = `Array<${getTSType(solveIdentifierValue(idNode.value))}>(${lines.join(", ")})`;
+        let type = getArrayType(idNode, clzCnt);
+        v = `Array<${type}>(${lines.join(", ")})`;
     }
     return v;
+}
+
+function getArrayType(node: AstNode, clzCnt: ClassContext) {
+    let type = "any";
+    if (node) {
+        if (node.type === NodeName.IdentifierNode) {
+            type = getTSType(solveIdentifierValue(node.value));
+            checkImp(type, clzCnt.impDict);
+        } else {
+            type = getNodeStr(node, clzCnt);
+        }
+    }
+    return type;
 }
 
 function getBlockStr(node: AstNode, clzCnt: ClassContext, addSuper?: boolean) {
