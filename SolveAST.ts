@@ -750,7 +750,7 @@ function getNodeStr(node: AstNode, clzCnt: ClassContext): string {
         case NodeName.BinaryOperatorIsNode:
             return getInstanceOfStr(node, clzCnt);
         case NodeName.BinaryOperatorAssignmentNode:
-            return getAssignmentStr(node, clzCnt);
+            return getLeftRightStr(node, clzCnt, " = ", true);
         //============ BinaryOperatorMath =================
         case NodeName.BinaryOperatorPlusNode:
             return getLeftRightStr(node, clzCnt, " + ", true);
@@ -1500,13 +1500,4 @@ function getAs(left: string, right: string) {
         right = "any";
     }
     return `${left} as ${right}`
-}
-
-function getAssignmentStr(node: AstNode, clzCnt: ClassContext) {
-    let v = getLeftRightStr(node, clzCnt, " = ");
-    const parentType = node.parent.type;
-    if (parentType === NodeName.BinaryOperatorLogicalAndNode) {//逻辑符
-        v = `(${v})`;
-    }
-    return v;
 }
