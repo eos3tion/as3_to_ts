@@ -407,12 +407,12 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
                 lines.push("");
             }
         }
+        lines.push(`} `)
         for (let i = 0; i < others.length; i++) {
             const other = others[i];
             lines.push(getNodeStr(other, clzCnt));
             lines.push("");
         }
-        lines.push(`} `)
         return lines.join("\n");
 
     }
