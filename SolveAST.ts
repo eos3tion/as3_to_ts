@@ -509,6 +509,7 @@ interface ClassContext {
 const as2tsType = {
     "Number": "number",
     "int": "number",
+    "uint": "number",
     "*": "any",
     "Object": "any",
     "String": "string",
@@ -1443,6 +1444,7 @@ function getSwitchStr(node: AstNode, clzCnt: ClassContext) {
 const typeofValue = {
     "Number": "number",
     "int": "number",
+    "uint": "number",
     "Object": "object",
     "String": "string",
     "Boolean": "boolean",
