@@ -562,6 +562,7 @@ const enum NodeName {
 }
 
 const enum NodeID {
+    LiteralStringID = "LiteralStringID",
     /**
      * @see NodeName.TerminalNode  
      * finally

@@ -575,8 +575,18 @@ function getStaticString(isStatic: boolean) {
 
 
 function getLiteralStr(node: AstNode, clzCnt: ClassContext) {
-    let [, value] = node.value as string;
-    return value.replaceAll("\n", "\\n");
+    if (node.id === NodeID.LiteralStringID) {
+        let v = solveIdentifierValue(node.value)
+            .replaceAll("\r", "\\r")
+            .replaceAll("\n", "\\n")
+            .replaceAll("\\", "\\\\")
+            .replaceAll("\"", "\\\"")
+            .replaceAll("\'", "\\\'")
+        return `"${v}"`;
+    } else {
+        let [, value] = node.value as string;
+        return value;
+    }
 }
 
 function getRegExpStr(node: AstNode, clzCnt: ClassContext) {
