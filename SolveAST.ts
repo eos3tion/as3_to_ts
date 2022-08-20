@@ -641,12 +641,16 @@ function checkAddThis(node: AstNode, clzCnt: ClassContext) {
     return v;
 }
 
-function getLeftRightStr(node: AstNode, clzCnt: ClassContext, middle: string) {
+function getLeftRightStr(node: AstNode, clzCnt: ClassContext, middle: string, addBrakets?: boolean) {
     const children = node.children;
     const [leftNode, rightNode] = children;
     let left = checkAddThis(leftNode, clzCnt);
     let right = checkAddThis(rightNode, clzCnt);
-    return `${left}${middle}${right}`;
+    let v = `${left}${middle}${right}`;
+    if (addBrakets) {
+        v = `(${v})`;
+    }
+    return v;
 }
 
 function getDynamicAccessStr(node: AstNode, clzCnt: ClassContext) {
@@ -750,48 +754,48 @@ function getNodeStr(node: AstNode, clzCnt: ClassContext): string {
         case NodeName.BinaryOperatorPlusNode:
             return getLeftRightStr(node, clzCnt, " + ");
         case NodeName.BinaryOperatorPlusAssignmentNode:
-            return getLeftRightStr(node, clzCnt, " += ");
+            return getLeftRightStr(node, clzCnt, " += ", true);
         case NodeName.BinaryOperatorMinusNode:
             return getLeftRightStr(node, clzCnt, " - ");
         case NodeName.BinaryOperatorMinusAssignmentNode:
-            return getLeftRightStr(node, clzCnt, " -= ");
+            return getLeftRightStr(node, clzCnt, " -= ", true);
         case NodeName.BinaryOperatorMultiplicationNode:
             return getLeftRightStr(node, clzCnt, " * ");
         case NodeName.BinaryOperatorMultiplicationAssignmentNode:
-            return getLeftRightStr(node, clzCnt, " *= ");
+            return getLeftRightStr(node, clzCnt, " *= ", true);
         case NodeName.BinaryOperatorDivisionNode:
             return getLeftRightStr(node, clzCnt, " / ");
         case NodeName.BinaryOperatorDivisionAssignmentNode:
-            return getLeftRightStr(node, clzCnt, " /= ");
+            return getLeftRightStr(node, clzCnt, " /= ", true);
         case NodeName.BinaryOperatorModuloNode:
             return getLeftRightStr(node, clzCnt, " % ");
         case NodeName.BinaryOperatorModuloAssignmentNode:
-            return getLeftRightStr(node, clzCnt, " %= ");
+            return getLeftRightStr(node, clzCnt, " %= ", true);
         //============ BinaryOperatorBitwise =================
         case NodeName.BinaryOperatorBitwiseAndNode:
-            return `(${getLeftRightStr(node, clzCnt, " & ")})`;
+            return getLeftRightStr(node, clzCnt, " & ", true);
         case NodeName.BinaryOperatorBitwiseAndAssignmentNode:
-            return getLeftRightStr(node, clzCnt, " &= ");
+            return getLeftRightStr(node, clzCnt, " &= ", true);
         case NodeName.BinaryOperatorBitwiseLeftShiftNode:
-            return `(${getLeftRightStr(node, clzCnt, " << ")})`;
+            return getLeftRightStr(node, clzCnt, " << ", true);
         case NodeName.BinaryOperatorBitwiseLeftShiftAssignmentNode:
-            return getLeftRightStr(node, clzCnt, " <<= ");
+            return getLeftRightStr(node, clzCnt, " <<= ", true);
         case NodeName.BinaryOperatorBitwiseOrNode:
-            return `(${getLeftRightStr(node, clzCnt, " | ")})`;
+            return getLeftRightStr(node, clzCnt, " | ", true);
         case NodeName.BinaryOperatorBitwiseOrAssignmentNode:
-            return getLeftRightStr(node, clzCnt, " |= ");
+            return getLeftRightStr(node, clzCnt, " |= ", true);
         case NodeName.BinaryOperatorBitwiseRightShiftNode:
-            return `(${getLeftRightStr(node, clzCnt, " >> ")})`;
+            return getLeftRightStr(node, clzCnt, " >> ", true);
         case NodeName.BinaryOperatorBitwiseRightShiftAssignmentNode:
             return getLeftRightStr(node, clzCnt, " >>= ");
         case NodeName.BinaryOperatorBitwiseUnsignedRightShiftNode:
-            return `(${getLeftRightStr(node, clzCnt, " >>> ")})`;
+            return getLeftRightStr(node, clzCnt, " >>> ", true);
         case NodeName.BinaryOperatorBitwiseUnsignedRightShiftAssignmentNode:
-            return getLeftRightStr(node, clzCnt, " >>>= ");
+            return getLeftRightStr(node, clzCnt, " >>>= ", true);
         case NodeName.BinaryOperatorBitwiseXorNode:
-            return getLeftRightStr(node, clzCnt, " ^ ");
+            return getLeftRightStr(node, clzCnt, " ^ ", true);
         case NodeName.BinaryOperatorBitwiseXorAssignmentNode:
-            return getLeftRightStr(node, clzCnt, " ^= ");
+            return getLeftRightStr(node, clzCnt, " ^= ", true);
         //============ BinaryOperatorLogical =================
         case NodeName.BinaryOperatorEqualNode:
             return getLeftRightStr(node, clzCnt, " == ");
@@ -810,13 +814,13 @@ function getNodeStr(node: AstNode, clzCnt: ClassContext): string {
         case NodeName.BinaryOperatorLessThanEqualsNode:
             return getLeftRightStr(node, clzCnt, " <= ");
         case NodeName.BinaryOperatorLogicalAndNode:
-            return `${getLeftRightStr(node, clzCnt, " && ")}`;
+            return getLeftRightStr(node, clzCnt, " && ");
         case NodeName.BinaryOperatorLogicalAndAssignmentNode:
-            return getLeftRightStr(node, clzCnt, " &&= ");
+            return getLeftRightStr(node, clzCnt, " &&= ", true);
         case NodeName.BinaryOperatorLogicalOrNode:
-            return `(${getLeftRightStr(node, clzCnt, " || ")})`;
+            return getLeftRightStr(node, clzCnt, " || ", true);
         case NodeName.BinaryOperatorLogicalOrAssignmentNode:
-            return getLeftRightStr(node, clzCnt, " ||= ");
+            return getLeftRightStr(node, clzCnt, " ||= ", true);
         //================UnaryOperator=============
         case NodeName.UnaryOperatorPreIncrementNode:
             return getUnaryLeftStr(node, clzCnt, "++");
