@@ -16,12 +16,27 @@ export function getChildIdx(children: AstNode[], start: number, type: NodeName, 
     return -1;
 }
 
-export function getParent(node: AstNode, type: NodeName, id?: NodeID) {
+export function getParent(node: AstNode, type: NodeName, maxLevel = Infinity, id?: NodeID) {
     let parent = node.parent;
-    while (parent) {
+    let level = 1;
+    while (level <= maxLevel && parent) {
         if (parent.type === type && (id === undefined || parent.id === id)) {
             return parent;
         }
         parent = parent.parent;
+        level++;
     }
+}
+
+export function checkParents(node: AstNode, ...types: NodeName[]) {
+    let parent = node.parent;
+    let i = 0;
+    do {
+        if (parent && parent.type === types[i++]) {
+            parent = parent.parent;
+        } else {
+            return false;
+        }
+    } while (i < types.length)
+    return true;
 }
