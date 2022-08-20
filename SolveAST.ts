@@ -1,7 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { ClassData, getClassData, isScopeNode } from "./GetScopeData";
-import { getChildIdx, solveIdentifierValue } from "./Helper";
+import { getChildIdx, getParent, solveIdentifierValue } from "./Helper";
 
 type FileContext = {
     pkgDict: { [pkg: string]: FileData[] },
@@ -940,6 +940,9 @@ function getVarStr(node: AstNode, clzCnt: ClassContext, isClass?: boolean) {
             v += getChainVarStr(child, clzCnt);
         }
     }
+    if (!getParent(node, NodeName.ForLoopNode)) {
+        v += ";";
+    }
     return v;
 }
 
@@ -1494,5 +1497,9 @@ function getAssignmentStr(node: AstNode, clzCnt: ClassContext) {
     if (parentType === NodeName.BinaryOperatorLogicalAndNode) {//逻辑符
         v = `(${v})`;
     }
-    return v + ";";
+    if (!getParent(node, NodeName.ForLoopNode)) {
+        v += ";";
+    }
+    return v;
 }
+

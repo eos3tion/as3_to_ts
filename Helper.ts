@@ -15,3 +15,13 @@ export function getChildIdx(children: AstNode[], start: number, type: NodeName, 
     }
     return -1;
 }
+
+export function getParent(node: AstNode, type: NodeName, id?: NodeID) {
+    let parent = node.parent;
+    while (parent) {
+        if (parent.type === type && (id === undefined || parent.id === id)) {
+            return parent;
+        }
+        parent = parent.parent;
+    }
+}
