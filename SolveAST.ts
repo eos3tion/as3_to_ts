@@ -1495,6 +1495,8 @@ function getAsStr(node: AstNode, clzCnt: ClassContext) {
 function getAs(left: string, right: string) {
     if (right === "Array") {
         right = "any[]";
+    } else if (right === "Object") {
+        right = "any";
     }
     return `${left} as ${right}`
 }
