@@ -1190,7 +1190,7 @@ function getObjStr(node: AstNode, clzCnt: ClassContext) {
 }
 function getObjKVStr(node: AstNode, clzCnt: ClassContext) {
     const [keyNode, valueNode] = node.children;
-    return `${solveIdentifierValue(keyNode.value)} : ${checkAddThis(valueNode, clzCnt)} `
+    return `"${solveIdentifierValue(keyNode.value)}" : ${checkAddThis(valueNode, clzCnt)} `
 }
 
 function getArrStr(node: AstNode, clzCnt: ClassContext) {
