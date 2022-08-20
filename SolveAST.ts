@@ -960,6 +960,22 @@ function getForLoopStr(node: AstNode, clzCnt: ClassContext) {
     if (id === NodeID.ForEachLoopID) {
         //for each(A in B) -> for(A of B)
         const nodeIn = conditionNode.children[0];
+        return `for (${sovleInLoop(nodeIn, "of", clzCnt)})${getBlockStr(contentNode, clzCnt)} `;
+
+    } else {//当 ForLoopID 处理 
+        //检查是for(var a in b)还是 for(var i=0;i<n;i++);
+        const conChildren = conditionNode.children;
+        let conStr = "";
+        const child0 = conChildren[0];
+        if (conChildren.length === 1 && child0.type === NodeName.BinaryOperatorInNode) {
+            conStr = sovleInLoop(child0, "in", clzCnt);
+        } else {
+            conStr = getConStr(conditionNode, clzCnt, ";");
+        }
+        return `for(${conStr})${getBlockStr(contentNode, clzCnt)} `
+    }
+
+    function sovleInLoop(nodeIn: AstNode, middle: string, clzCnt: ClassContext) {
         const [varExpNode, listNode] = nodeIn.children;
         let varStr = "";
         let nameNode: AstNode;
@@ -975,20 +991,7 @@ function getForLoopStr(node: AstNode, clzCnt: ClassContext) {
             nameNode = varExpNode;
         }
         const name = solveIdentifierValue(nameNode.value);
-        return `for (${varStr}${name} of ${checkAddThis(listNode, clzCnt)})${getBlockStr(contentNode, clzCnt)} `;
-
-    } else {//当 ForLoopID 处理 
-        //检查是for(var a in b)还是 for(var i=0;i<n;i++);
-        const conChildren = conditionNode.children;
-        let conStr = "";
-        const child0 = conChildren[0];
-        if (conChildren.length === 1 && child0.type === NodeName.BinaryOperatorInNode) {
-            conStr = `${getNodeStr(child0, clzCnt)}`
-        } else {
-            conStr = getConStr(conditionNode, clzCnt, ";");
-        }
-        return `for(${conStr})${getBlockStr(contentNode, clzCnt)} `
-
+        return `${varStr}${name} ${middle} ${checkAddThis(listNode, clzCnt)}`
     }
 }
 
