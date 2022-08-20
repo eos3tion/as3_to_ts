@@ -558,7 +558,7 @@ function solveParam(paramNameNode: AstNode, paramTypeNode: AstNode, defaultNode:
 
 function getNamespaceIdent(node: AstNode) {
     let v = solveIdentifierValue(node.value);
-    if (v === "public") {
+    if (v === "public" || v === "internal") {
         v = "";
     } else {
         v += " ";
