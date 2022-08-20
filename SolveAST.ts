@@ -716,8 +716,9 @@ function getNodeStr(node: AstNode, clzCnt: ClassContext): string {
         case NodeName.VariableExpressionNode:
             return getVarStr(node.children[0], clzCnt);
         case NodeName.LiteralNode:
-        case NodeName.NumericLiteralNode:
             return getLiteralStr(node, clzCnt);
+        case NodeName.NumericLiteralNode:
+            return `(${getLiteralStr(node, clzCnt)})`;
         case NodeName.RegExpLiteralNode:
             return getRegExpStr(node, clzCnt);
         case NodeName.FunctionCallNode:
