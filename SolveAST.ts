@@ -737,7 +737,7 @@ function getNodeStr(node: AstNode, clzCnt: ClassContext): string {
         case NodeName.BinaryOperatorCommaNode:
             return getLeftRightStr(node, clzCnt, ", ");
         case NodeName.BinaryOperatorAsNode:
-            return `(${getLeftRightStr(node, clzCnt, " as ")})`;
+            return getAsStr(node, clzCnt);
         case NodeName.BinaryOperatorInNode:
             return getLeftRightStr(node, clzCnt, " in ");
         case NodeName.BinaryOperatorInstanceOfNode:
@@ -1320,7 +1320,7 @@ function getFuncCallStr(node: AstNode, clzCnt: ClassContext) {
                 //检查参数节点是否为单一node
                 if (conChildren.length === 1) {//此方法为as3的装箱操作，js没有，处理为  as 
                     const sub = conChildren[0];
-                    v = `${checkAddThis(sub, clzCnt)} as ${name}`;
+                    v = getAs(checkAddThis(sub, clzCnt), name);
                     isAs = true;
 
                 }
@@ -1469,4 +1469,19 @@ function getInstanceOfStr(node: AstNode, clzCnt: ClassContext) {
 
 function getThrowStr(node: AstNode, clzCnt: ClassContext) {
     return "throw " + checkAddThis(node.children[0], clzCnt);
+}
+
+function getAsStr(node: AstNode, clzCnt: ClassContext) {
+    const children = node.children;
+    const [leftNode, rightNode] = children;
+    let left = checkAddThis(leftNode, clzCnt);
+    let right = checkAddThis(rightNode, clzCnt);
+    return `(${getAs(left, right)})`
+}
+
+function getAs(left: string, right: string) {
+    if (right === "Array") {
+        right = "any[]";
+    }
+    return `${left} as ${right}`
 }
