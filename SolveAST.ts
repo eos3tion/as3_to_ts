@@ -1298,15 +1298,33 @@ function getFuncCallStr(node: AstNode, clzCnt: ClassContext) {
             isNew = true;
             i++;
         }
-        let nameNode = children[i++];
-        let name = checkAddThis(nameNode, clzCnt);
-        v += name;
+        const nameNode = children[i++];
         const conNode = children[i++];
-        if (isNew && nameNode.type === NodeName.TypedExpressionNode && conNode.children.length > 1) {//as3 new Vector只有2个参数，第一个是长度，第二个为是否是固定长度的参数
-            const lenNode = conNode.children[0];
-            v += `(${checkAddThis(lenNode, clzCnt)})`
-        } else {
-            v += `(${getConStr(conNode, clzCnt, ",")})`;
+        let name = checkAddThis(nameNode, clzCnt);
+        //检查 name 是否有同引用值
+        const conChildren = conNode.children;
+        let imp = clzCnt.impDict[name];
+        let isAs = false;
+        if (!isNew) {
+            if (imp) {//有引用至
+                //检查参数节点是否为单一node
+                if (conChildren.length === 1) {//此方法为as3的装箱操作，js没有，处理为  as 
+                    const sub = conChildren[0];
+                    v = `${checkAddThis(sub, clzCnt)} as ${name}`;
+                    isAs = true;
+
+                }
+            }
+        }
+        if (!isAs) {
+            v += name;
+
+            if (isNew && nameNode.type === NodeName.TypedExpressionNode && conChildren.length > 1) {//as3 new Vector只有2个参数，第一个是长度，第二个为是否是固定长度的参数
+                const lenNode = conChildren[0];
+                v += `(${checkAddThis(lenNode, clzCnt)})`
+            } else {
+                v += `(${getConStr(conNode, clzCnt, ",")})`;
+            }
         }
     }
     return v;
