@@ -336,7 +336,7 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
         }
         for (let i = 0; i < constructors.length; i++) {
             const constuctor = constructors[i];
-            lines.push(getFunctionStr(constuctor, clzCnt, false, true, baseClassStr !== ""));
+            lines.push(getFunctionStr(constuctor, clzCnt, true, true, baseClassStr !== ""));
             lines.push("");
         }
         //检查 block 中`属性 / 方法`的引用，是否需要加 `this.`
@@ -395,7 +395,7 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
         for (let key in staticDict) {
             const dat = staticDict[key];
             if (dat.type === NodeName.FunctionNode) {
-                lines.push(getFunctionStr(dat, clzCnt));
+                lines.push(getFunctionStr(dat, clzCnt, true));
                 lines.push("");
             }
         }
@@ -403,7 +403,7 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
         for (let key in dict) {
             const dat = dict[key];
             if (dat.type === NodeName.FunctionNode) {
-                lines.push(getFunctionStr(dat, clzCnt));
+                lines.push(getFunctionStr(dat, clzCnt, true));
                 lines.push("");
             }
         }
@@ -457,7 +457,7 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
                 const child = children[i];
                 switch (child.type) {
                     case NodeName.FunctionNode:
-                        lines.push(getFunctionStr(child, cnt));
+                        lines.push(getFunctionStr(child, cnt, true));
                         break;
                     case NodeName.SetterNode:
                         lines.push(getSetterStr(child, cnt));
@@ -736,7 +736,7 @@ function getNodeStr(node: AstNode, clzCnt: ClassContext): string {
         case NodeName.DynamicAccessNode:
             return getDynamicAccessStr(node, clzCnt);
         case NodeName.FunctionObjectNode:
-            return getFunctionStr(node.children[0], clzCnt, true);
+            return getFunctionStr(node.children[0], clzCnt);
         case NodeName.FunctionNode:
             return getFunctionStr(node, clzCnt);
         //========== BinaryOperator ==================================
@@ -1021,7 +1021,7 @@ function getDoWhileLoopStr(node: AstNode, clzCnt: ClassContext) {
     return `do${getBlockStr(contentNode, clzCnt)}while(${getNodeStr(conditionNode, clzCnt)}) `
 }
 
-function getFunctionStr(node: AstNode, clzCnt: ClassContext, addFunc?: boolean, isConstructor?: boolean, addSuper?: boolean) {
+function getFunctionStr(node: AstNode, clzCnt: ClassContext, noFunc?: boolean, isConstructor?: boolean, addSuper?: boolean) {
     const children = node.children;
     let ident = "";
     let name: string;
@@ -1073,7 +1073,7 @@ function getFunctionStr(node: AstNode, clzCnt: ClassContext, addFunc?: boolean, 
     }
     let paramsStr = params.join(",");
     let funcStr = "";
-    if (addFunc) {
+    if (!noFunc) {
         funcStr = "function "
     }
 
