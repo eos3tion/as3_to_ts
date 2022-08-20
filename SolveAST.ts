@@ -1348,9 +1348,16 @@ function getFuncCallStr(node: AstNode, clzCnt: ClassContext) {
 function getTryStr(node: AstNode, clzCnt: ClassContext) {
     let v = "try";
     let children = node.children;
+    let hasCatch = false;
     for (let i = 0; i < children.length; i++) {
         const child = children[i];
         v += getNodeStr(child, clzCnt);
+        if (child.type === NodeName.CatchNode) {
+            hasCatch = true;
+        }
+    }
+    if (!hasCatch) {
+        v += `catch{\n}`
     }
     return v;
 }
