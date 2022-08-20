@@ -538,11 +538,11 @@ function getParamNodeString(node: AstNode, clzCnt: ClassContext) {
 }
 
 function solveParam(paramNameNode: AstNode, paramTypeNode: AstNode, defaultNode: AstNode, clzCnt: ClassContext, addOpt: boolean) {
-    let typeStr = checkAddThis(paramTypeNode, clzCnt);
+    let typeStr = checkScope(paramTypeNode, clzCnt, true);
     let defStr = "";
     let optStr = "";
     if (defaultNode && !clzCnt.isInterface) {
-        let val = checkAddThis(defaultNode, clzCnt);
+        let val = checkScope(defaultNode, clzCnt);
         if (val) {
             if (val === "null" || val === "undefined" || val === "void 0") {
                 if (addOpt) {
@@ -608,34 +608,33 @@ function checkImp(v: string, impDict: { [name: string]: ImpRefs }) {
     return v;
 }
 
-function checkAddThis(node: AstNode, clzCnt: ClassContext) {
+function checkScope(node: AstNode, clzCnt: ClassContext, noAddThis?: boolean) {
     let v = "";
     if (node.type === NodeName.IdentifierNode) {
         v = solveIdentifierValue(node.value);
         const { dict, staticDict, baseDict, impDict, baseStaticDict, name } = clzCnt;
         //检查node的parent
         let parent = node.parent;
-        let isLocalVar = false;
         while (parent) {
             if (isScopeNode(parent)) {
                 const dict = parent.dict;
                 if (v in dict) {
-                    isLocalVar = true;
+                    noAddThis = true;
                     break;
                 }
             }
             parent = parent.parent;
         }
-        if (!isLocalVar) {
+        if (!noAddThis) {
             if (v in dict || v in baseDict) {//成员变量
                 v = `this.${v}`;
             } else if (v in staticDict || v in baseStaticDict) {
                 v = `${name}.${v}`;
             } else {
-                isLocalVar = true;
+                noAddThis = true;
             }
         }
-        if (isLocalVar) {
+        if (noAddThis) {
             checkImp(v, impDict);
         }
     } else {
@@ -647,8 +646,8 @@ function checkAddThis(node: AstNode, clzCnt: ClassContext) {
 function getLeftRightStr(node: AstNode, clzCnt: ClassContext, middle: string, addBrakets?: boolean) {
     const children = node.children;
     const [leftNode, rightNode] = children;
-    let left = checkAddThis(leftNode, clzCnt);
-    let right = checkAddThis(rightNode, clzCnt);
+    let left = checkScope(leftNode, clzCnt);
+    let right = checkScope(rightNode, clzCnt);
     let v = `${left}${middle}${right}`;
     if (addBrakets) {
         v = `(${v})`;
@@ -659,17 +658,17 @@ function getLeftRightStr(node: AstNode, clzCnt: ClassContext, middle: string, ad
 function getDynamicAccessStr(node: AstNode, clzCnt: ClassContext) {
     const children = node.children;
     const [leftNode, rightNode] = children;
-    let left = checkAddThis(leftNode, clzCnt);
-    let right = checkAddThis(rightNode, clzCnt);
+    let left = checkScope(leftNode, clzCnt);
+    let right = checkScope(rightNode, clzCnt);
     return `${left}[${right}]`;
 }
 
 function getTernaryStr(node: AstNode, clzCnt: ClassContext) {
     const children = node.children;
     const [conNode, leftNode, rightNode] = children;
-    let con = checkAddThis(conNode, clzCnt);
-    let left = checkAddThis(leftNode, clzCnt);
-    let right = checkAddThis(rightNode, clzCnt);
+    let con = checkScope(conNode, clzCnt);
+    let left = checkScope(leftNode, clzCnt);
+    let right = checkScope(rightNode, clzCnt);
     return `${con} ? ${left} : ${right}`;
 }
 
@@ -686,7 +685,7 @@ function getIfNodeStr(node: AstNode, clzCnt: ClassContext) {
             if (subs.length === 2) {
                 let [con, cnt] = subs;
                 let prefix = i === 0 ? "if" : "else if";
-                lines.push(`${prefix} (${checkAddThis(con, clzCnt)})`);
+                lines.push(`${prefix} (${checkScope(con, clzCnt)})`);
                 lines.push(getNodeStr(cnt, clzCnt));
             } else {
                 console.log(`条件节点没有2个子节点`, child);
@@ -699,7 +698,7 @@ function getIfNodeStr(node: AstNode, clzCnt: ClassContext) {
 function getMemberAccessExpressionNodeStr(node: AstNode, clzCnt: ClassContext) {
     const children = node.children;
     const [leftNode, rightNode] = children;
-    let left = checkAddThis(leftNode, clzCnt);
+    let left = checkScope(leftNode, clzCnt);
     let right = getNodeStr(rightNode, clzCnt);
     return `${left}.${right}`;
 }
@@ -968,7 +967,7 @@ function getReturnStr(node: AstNode, clzCnt: ClassContext) {
     let v = `return `;
     for (let i = 0; i < children.length; i++) {
         const child = children[i];
-        v += checkAddThis(child, clzCnt);
+        v += checkScope(child, clzCnt);
     }
     return v;
 }
@@ -1010,7 +1009,7 @@ function getForLoopStr(node: AstNode, clzCnt: ClassContext) {
             nameNode = varExpNode;
         }
         const name = solveIdentifierValue(nameNode.value);
-        return `${varStr}${name} ${middle} ${checkAddThis(listNode, clzCnt)}`
+        return `${varStr}${name} ${middle} ${checkScope(listNode, clzCnt)}`
     }
 }
 
@@ -1090,7 +1089,7 @@ function getFunctionStr(node: AstNode, clzCnt: ClassContext, noFunc?: boolean, i
 
     let retType = "";
     if (retNode) {
-        retType = ": " + getTSType(checkAddThis(retNode, clzCnt));
+        retType = ": " + getTSType(checkScope(retNode, clzCnt));
     }
     let v = isConstructor ? `constructor(${paramsStr})` : `${ident}${override}${getStaticString(isStatic)}${funcStr}${name} (${paramsStr})`;
     return v + retType + blockStr;
@@ -1177,7 +1176,7 @@ function getGetterStr(node: AstNode, clzCnt: ClassContext) {
 
     let retType = "";
     if (retNode) {
-        retType = ": " + getTSType(checkAddThis(retNode, clzCnt));
+        retType = ": " + getTSType(checkScope(retNode, clzCnt));
     }
     return `${ident}${getStaticString(isStatic)}get ${name} ()${retType}${blockStr}`;
 }
@@ -1199,7 +1198,7 @@ function getObjStr(node: AstNode, clzCnt: ClassContext) {
 }
 function getObjKVStr(node: AstNode, clzCnt: ClassContext) {
     const [keyNode, valueNode] = node.children;
-    return `"${solveIdentifierValue(keyNode.value)}" : ${checkAddThis(valueNode, clzCnt)} `
+    return `"${solveIdentifierValue(keyNode.value)}" : ${checkScope(valueNode, clzCnt)} `
 }
 
 function getArrStr(node: AstNode, clzCnt: ClassContext) {
@@ -1210,7 +1209,7 @@ function getArrStr(node: AstNode, clzCnt: ClassContext) {
         const children = container.children;
         for (let i = 0; i < children.length; i++) {
             const child = children[i];
-            lines.push(checkAddThis(child, clzCnt));
+            lines.push(checkScope(child, clzCnt));
         }
         v = `[${lines.join(", ")}]`;
     }
@@ -1289,7 +1288,7 @@ function getConStr(node: AstNode, clzCnt: ClassContext, spe = "") {
         if (child.type === NodeName.ContainerNode) {
             childs.push(getConStr(child, clzCnt, ","));
         } else {
-            childs.push(checkAddThis(child, clzCnt));
+            childs.push(checkScope(child, clzCnt));
         }
     }
     let pre = "";
@@ -1319,7 +1318,7 @@ function getFuncCallStr(node: AstNode, clzCnt: ClassContext) {
         }
         const nameNode = children[i++];
         const conNode = children[i++];
-        let name = checkAddThis(nameNode, clzCnt);
+        let name = checkScope(nameNode, clzCnt);
         //检查 name 是否有同引用值
         const conChildren = conNode.children;
         let imp = clzCnt.impDict[name];
@@ -1329,7 +1328,7 @@ function getFuncCallStr(node: AstNode, clzCnt: ClassContext) {
                 //检查参数节点是否为单一node
                 if (conChildren.length === 1) {//此方法为as3的装箱操作，js没有，处理为  as 
                     const sub = conChildren[0];
-                    v = getAs(checkAddThis(sub, clzCnt), name);
+                    v = getAs(checkScope(sub, clzCnt), name);
                     isAs = true;
 
                 }
@@ -1340,7 +1339,7 @@ function getFuncCallStr(node: AstNode, clzCnt: ClassContext) {
 
             if (isNew && nameNode.type === NodeName.TypedExpressionNode && conChildren.length > 1) {//as3 new Vector只有2个参数，第一个是长度，第二个为是否是固定长度的参数
                 const lenNode = conChildren[0];
-                v += `(${checkAddThis(lenNode, clzCnt)})`
+                v += `(${checkScope(lenNode, clzCnt)})`
             } else {
                 v += `(${getConStr(conNode, clzCnt, ",")})`;
             }
@@ -1422,20 +1421,20 @@ function getLabelStr(node: AstNode, clzCnt: ClassContext) {
 
 function getUnaryRightStr(node: AstNode, clzCnt: ClassContext, right: string) {
     const child = node.children[0];
-    let v = checkAddThis(child, clzCnt);
+    let v = checkScope(child, clzCnt);
     return `${v}${right} `;
 }
 
 function getUnaryLeftStr(node: AstNode, clzCnt: ClassContext, left: string) {
     const child = node.children[0];
-    let v = checkAddThis(child, clzCnt);
+    let v = checkScope(child, clzCnt);
     return `${left}${v} `;
 }
 
 function getSwitchStr(node: AstNode, clzCnt: ClassContext) {
     const children = node.children;
     const [condNode, cntNode] = children;
-    let v = `switch (${checkAddThis(condNode, clzCnt)
+    let v = `switch (${checkScope(condNode, clzCnt)
         }) {
 \n`;
     const cases = cntNode.children;
@@ -1444,7 +1443,7 @@ function getSwitchStr(node: AstNode, clzCnt: ClassContext) {
         const caseChildren = caseNode.children;
         let cnt: AstNode;
         if (caseNode.type !== NodeName.TerminalNode) {
-            v += `\tcase ${checkAddThis(caseChildren[0], clzCnt)}: \n`;
+            v += `\tcase ${checkScope(caseChildren[0], clzCnt)}: \n`;
             cnt = caseChildren[1];
         } else {
             v += `default: \n`;
@@ -1473,7 +1472,7 @@ function getInstanceOfStr(node: AstNode, clzCnt: ClassContext) {
         //检查是否为基本类型
         let t = typeofValue[solveIdentifierValue(rightNode.value)]
         if (t) {
-            v = `typeof ${checkAddThis(leftNode, clzCnt)} === "${t}"`;
+            v = `typeof ${checkScope(leftNode, clzCnt)} === "${t}"`;
             flag = false;
         }
     }
@@ -1485,14 +1484,14 @@ function getInstanceOfStr(node: AstNode, clzCnt: ClassContext) {
 }
 
 function getThrowStr(node: AstNode, clzCnt: ClassContext) {
-    return "throw " + checkAddThis(node.children[0], clzCnt);
+    return "throw " + checkScope(node.children[0], clzCnt);
 }
 
 function getAsStr(node: AstNode, clzCnt: ClassContext) {
     const children = node.children;
     const [leftNode, rightNode] = children;
-    let left = checkAddThis(leftNode, clzCnt);
-    let right = checkAddThis(rightNode, clzCnt);
+    let left = checkScope(leftNode, clzCnt);
+    let right = checkScope(rightNode, clzCnt);
     return `(${getAs(left, right)})`
 }
 
