@@ -585,9 +585,6 @@ function getParamNodeString(node: AstNode, clzCnt: ClassContext, opt?: GetParamN
     const children = node.children;
     const { noDefault } = opt || EmptyObj as GetParamNodeStringOpt;
     let [paramNameNode, paramTypeNode, defaultNode] = children;
-    if (noDefault) {
-        defaultNode = undefined;
-    }
     let v = "";
     if (node.start !== paramNameNode.start) {//检查是否是 `...`
         let p = clzCnt.content.substring(node.start, paramNameNode.start).trim();
@@ -595,11 +592,16 @@ function getParamNodeString(node: AstNode, clzCnt: ClassContext, opt?: GetParamN
             v = "...";
         }
     }
-    v += solveParam(paramNameNode, paramTypeNode, defaultNode, clzCnt, true);
+    v += solveParam(paramNameNode, paramTypeNode, defaultNode, clzCnt, { addOpt: true, noDefault });
     return v;
 }
 
-function solveParam(paramNameNode: AstNode, paramTypeNode: AstNode, defaultNode: AstNode, clzCnt: ClassContext, addOpt: boolean) {
+interface SolveParamOpt extends GetParamNodeStringOpt {
+    addOpt?: boolean
+}
+
+function solveParam(paramNameNode: AstNode, paramTypeNode: AstNode, defaultNode: AstNode, clzCnt: ClassContext, opt?: SolveParamOpt) {
+    const { addOpt, noDefault } = opt || EmptyObj as SolveParamOpt;
     let typeStr = checkScope(paramTypeNode, clzCnt, true);
     let defStr = "";
     let optStr = "";
@@ -611,15 +613,18 @@ function solveParam(paramNameNode: AstNode, paramTypeNode: AstNode, defaultNode:
                     optStr = "?";
                 }
             } else {
-                defStr = ` = ${val}`;
+                if (noDefault) {
+                    optStr = "?";
+                } else {
+                    defStr = ` = ${val}`;
+                }
             }
         }
     }
     if (typeStr) {
         typeStr = `: ${getTSType(typeStr)}`;
     }
-    return `${solveIdentifierValue(paramNameNode.value)
-        }${optStr}${typeStr}${defStr} `;
+    return `${solveIdentifierValue(paramNameNode.value)}${optStr}${typeStr}${defStr} `;
 }
 
 function getNamespaceIdent(node: AstNode) {
@@ -1000,7 +1005,7 @@ function getVarStr(node: AstNode, clzCnt: ClassContext, isClass?: boolean) {
     if (defaultNode && defaultNode.type === NodeName.ChainedVariableNode) {
         defaultNode = undefined;
     }
-    let v = solveParam(nameNode, typeNode, defaultNode, clzCnt, false);
+    let v = solveParam(nameNode, typeNode, defaultNode, clzCnt);
     if (isClass) {
         v = ident + getStaticString(isStatic) + v;
     } else {
@@ -1017,7 +1022,7 @@ function getVarStr(node: AstNode, clzCnt: ClassContext, isClass?: boolean) {
 
 function getChainVarStr(node: AstNode, clzCnt: ClassContext) {
     const [nameNode, typeNode, defaultNode] = node.children;
-    return ", " + solveParam(nameNode, typeNode, defaultNode, clzCnt, false);
+    return ", " + solveParam(nameNode, typeNode, defaultNode, clzCnt);
 }
 
 
