@@ -40,3 +40,9 @@ export function checkParents(node: AstNode, ...types: NodeName[]) {
     } while (i < types.length)
     return true;
 }
+
+export function appendTo(from: any[], to: any[]) {
+    for (let i = 0; i < from.length; i++) {
+        to.push(from[i]);
+    }
+}

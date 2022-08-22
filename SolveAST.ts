@@ -1,9 +1,9 @@
 import fs from "fs";
 import path from "path";
 import { ClassData, getClassData, isScopeNode } from "./GetScopeData";
-import { getChildIdx, solveIdentifierValue } from "./Helper";
+import { appendTo, getChildIdx, solveIdentifierValue } from "./Helper";
 import { importFilter } from "./LayaIFFlasth";
-
+const EmptyObj = Object.freeze({});
 type FileContext = {
     pkgDict: { [pkg: string]: FileData[] },
     pathDict: { [path: string]: FileData }
@@ -125,7 +125,9 @@ export async function solveAst(dict: { [file: string]: AstNode }, callback: { (f
     const pathDict = {} as { [path: string]: FileData };
     const fileDict = {} as { [file: string]: FileData };
     const uriDict = {} as { [uri: string]: FileData };
-    const nameDict = {} as { [name: string]: FileData }
+    const nameDict = {} as { [name: string]: FileData };
+    const helperFile = "ClassHelper.ts";
+    fs.copyFileSync(path.join(__dirname, helperFile), path.join(baseDir, helperFile));
     for (const file in dict) {
         if (importFilter(path.relative(baseDir, file))) {
             continue
@@ -155,7 +157,7 @@ export async function solveAst(dict: { [file: string]: AstNode }, callback: { (f
     }
 
     for (const file in dict) {
-        if (filter(file)) {
+        if (filter(file) && !importFilter(path.relative(baseDir, file))) {
             const dat = fileDict[file];
             try {
                 await solveFileNode(dat, context).then(v => callback(file, v));
@@ -340,7 +342,7 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
         }
         for (let i = 0; i < constructors.length; i++) {
             const constuctor = constructors[i];
-            lines.push(getFunctionStr(constuctor, clzCnt, true, true, baseClassStr !== ""));
+            lines.push(getFunctionStr(constuctor, clzCnt, { noFunc: true, isConstructor: true, addSuper: baseClassStr !== "" }));
             lines.push("");
         }
         //检查 block 中`属性 / 方法`的引用，是否需要加 `this.`
@@ -396,22 +398,34 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
         }
 
         //最后附加函数
-        for (let key in staticDict) {
-            const dat = staticDict[key];
-            if (dat.type === NodeName.FunctionNode) {
-                lines.push(getFunctionStr(dat, clzCnt, true));
-                lines.push("");
-            }
-        }
-        //最后附加函数
         for (let key in dict) {
             const dat = dict[key];
             if (dat.type === NodeName.FunctionNode) {
-                lines.push(getFunctionStr(dat, clzCnt, true));
+                lines.push(getFunctionStr(dat, clzCnt, { noFunc: true }));
                 lines.push("");
             }
         }
+
+        let statFun = [] as string[];
+        //最后附加函数
+        for (let key in staticDict) {
+            const dat = staticDict[key];
+            if (dat.type === NodeName.FunctionNode) {
+                lines.push(getFunctionStr(dat, clzCnt, { noFunc: true, noBlock: true, addOptional: true }));
+                statFun.push(`"${key}", ${getFunctionStr(dat, clzCnt, { noName: true, noStatic: true })}`)
+            }
+        }
+
+
         lines.push(`} `)
+
+        if (statFun.length) {
+            lines.push(`$H.stc(${name},[`)
+            appendTo(statFun, lines);
+            lines.push(`]);`);
+        }
+
+
         for (let i = 0; i < others.length; i++) {
             const other = others[i];
             lines.push(getNodeStr(other, clzCnt));
@@ -461,7 +475,7 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
                 const child = children[i];
                 switch (child.type) {
                     case NodeName.FunctionNode:
-                        lines.push(getFunctionStr(child, cnt, true));
+                        lines.push(getFunctionStr(child, cnt, { noFunc: true }));
                         break;
                     case NodeName.SetterNode:
                         lines.push(getSetterStr(child, cnt));
@@ -1028,8 +1042,18 @@ function getDoWhileLoopStr(node: AstNode, clzCnt: ClassContext) {
     const [contentNode, conditionNode] = node.children;
     return `do${getBlockStr(contentNode, clzCnt)}while(${getNodeStr(conditionNode, clzCnt)}) `
 }
+interface GetFuncStrParam {
+    noFunc?: boolean;
+    isConstructor?: boolean;
+    addSuper?: boolean;
+    noBlock?: boolean;
+    addOptional?: boolean;
+    noName?: boolean;
+    noStatic?: boolean;
+}
 
-function getFunctionStr(node: AstNode, clzCnt: ClassContext, noFunc?: boolean, isConstructor?: boolean, addSuper?: boolean) {
+function getFunctionStr(node: AstNode, clzCnt: ClassContext, opts?: GetFuncStrParam) {
+    const { noFunc, isConstructor, addSuper, noBlock, noName, noStatic, addOptional } = opts || EmptyObj as GetFuncStrParam;
     const children = node.children;
     let ident = "";
     let name: string;
@@ -1075,6 +1099,10 @@ function getFunctionStr(node: AstNode, clzCnt: ClassContext, noFunc?: boolean, i
         }
     }
 
+    let nameStr = "";
+    if (!noName) {
+        nameStr = name;
+    }
     let override = "";
     if (isOverride) {
         override = "override ";
@@ -1086,7 +1114,7 @@ function getFunctionStr(node: AstNode, clzCnt: ClassContext, noFunc?: boolean, i
     }
 
     let blockStr = "";
-    if (block) {
+    if (block && !noBlock) {
         blockStr = getBlockStr(block, clzCnt, isConstructor && addSuper);
     }
     if (blockStr) {
@@ -1097,7 +1125,14 @@ function getFunctionStr(node: AstNode, clzCnt: ClassContext, noFunc?: boolean, i
     if (retNode) {
         retType = ": " + getTSType(checkScope(retNode, clzCnt));
     }
-    let v = isConstructor ? `constructor(${paramsStr})` : `${ident}${override}${getStaticString(isStatic)}${funcStr}${name} (${paramsStr})`;
+    if (noStatic) {
+        isStatic = false;
+    }
+    let optStr = "";
+    if (addOptional) {
+        optStr = "?";
+    }
+    let v = isConstructor ? `constructor(${paramsStr})` : `${ident}${override}${getStaticString(isStatic)}${funcStr}${nameStr}${optStr}(${paramsStr})`;
     return v + retType + blockStr;
 }
 
