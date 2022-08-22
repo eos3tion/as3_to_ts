@@ -126,8 +126,6 @@ export async function solveAst(dict: { [file: string]: AstNode }, callback: { (f
     const fileDict = {} as { [file: string]: FileData };
     const uriDict = {} as { [uri: string]: FileData };
     const nameDict = {} as { [name: string]: FileData };
-    const helperFile = "ClassHelper.ts";
-    fs.copyFileSync(path.join(__dirname, helperFile), path.join(baseDir, helperFile));
     for (const file in dict) {
         if (importFilter(path.relative(baseDir, file))) {
             continue

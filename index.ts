@@ -4,9 +4,8 @@ import fs from "fs";
 import path from "path";
 import { formatContent } from "./FormatTsContent";
 
-const inputBaseDir = "D:\\workspace\\projects\\wallan2022\\chuanqi\\chuanqi-laya-as3";
-const outDir = "D:\\workspace\\projects\\wallan2022\\chuanqi\\ts";
-
+const inputBaseDir = "D:\\workspace\\wallan2022\\sjcq\\game";
+const outDir = "D:\\workspace\\wallan2022\\sjcq\\chuanqi";
 
 function mkdirs(dir: string) {
     const paths = dir.split(path.sep);
@@ -31,10 +30,12 @@ function mkdirs(dir: string) {
     }
 }
 
-readAstFile("ast1.txt", dict => {
+readAstFile("ast.txt", dict => {
     solveAst(dict, (file, cnt) => {
         const p = path.join(outDir, path.relative(inputBaseDir, file).replace(".as", ".ts"));
         mkdirs(path.dirname(p));
         fs.writeFileSync(p, formatContent(cnt));
-    }, inputBaseDir, file => file.indexOf("libs\\laya") == -1)
+    }, inputBaseDir, file => file.indexOf("libs\\laya") == -1);
+    const helperFile = "ClassHelper.ts";
+    fs.copyFileSync(path.join(__dirname, helperFile), path.join(outDir, helperFile));
 })
