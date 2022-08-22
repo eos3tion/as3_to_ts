@@ -675,7 +675,7 @@ function getTernaryStr(node: AstNode, clzCnt: ClassContext) {
     let con = checkScope(conNode, clzCnt);
     let left = checkScope(leftNode, clzCnt);
     let right = checkScope(rightNode, clzCnt);
-    return `${con} ? ${left} : ${right}`;
+    return `(${con} ? ${left} : ${right})`;
 }
 
 
