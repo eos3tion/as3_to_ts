@@ -605,9 +605,11 @@ function getRegExpStr(node: AstNode, clzCnt: ClassContext) {
 }
 
 function checkImp(v: string, impDict: { [name: string]: ImpRefs }) {
-    let d = impDict[v];
-    if (d) {
-        d.count++;
+    if (impDict.hasOwnProperty(v)) {
+        let d = impDict[v];
+        if (d) {
+            d.count++;
+        }
     }
     return v;
 }
@@ -1328,7 +1330,7 @@ function getFuncCallStr(node: AstNode, clzCnt: ClassContext) {
         }
         //检查 name 是否有同引用值
         const conChildren = conNode.children;
-        let imp = clzCnt.impDict[name];
+        let imp = clzCnt.impDict.hasOwnProperty(name);
         let isAs = false;
         if (!isNew) {
             if (imp) {//有引用至
