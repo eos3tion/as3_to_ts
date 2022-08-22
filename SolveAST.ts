@@ -436,15 +436,18 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
             lines.push(`]);`);
         }
 
-        lines.push(`$H.clz(${name},"${getFullName(pkg, name)}",`);
-        if (impls) {
+        let impStr = "";
+        if (impls && impls.length) {
+            const impLines = [] as string[]
             for (let i = 0; i < impls.length; i++) {
                 const v = impls[i];
                 let d = impDict[v];
-                lines.push(`"${d.fullName}",`)
+                impLines.push(`"${d.fullName}"`)
             }
+            impStr = `, [\n${impLines.join(",\n")}\n]`;
         }
-        lines.push(`)`);
+
+        lines.push(`$H.clz(${name},"${getFullName(pkg, name)}"${impStr})`);
 
         for (let i = 0; i < others.length; i++) {
             const other = others[i];
