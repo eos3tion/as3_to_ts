@@ -628,13 +628,13 @@ function solveParam(paramNameNode: AstNode, paramTypeNode: AstNode, defaultNode:
 }
 
 function getNamespaceIdent(node: AstNode) {
-    let v = solveIdentifierValue(node.value);
-    if (v === "public" || v === "internal") {
-        v = "";
-    } else {
-        v += " ";
-    }
-    return v;
+    // let v = solveIdentifierValue(node.value);
+    // if (v === "public" || v === "internal") {
+    //     v = "";
+    // } else {
+    //     v += " ";
+    // }
+    return "";
 }
 
 function getStaticString(isStatic: boolean) {
