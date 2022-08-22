@@ -1564,10 +1564,19 @@ function getInstanceOfStr(node: AstNode, clzCnt: ClassContext) {
     let flag = true;
     if (rightNode.type === NodeName.IdentifierNode) {
         //检查是否为基本类型
-        let t = typeofValue[solveIdentifierValue(rightNode.value)]
+        let name = solveIdentifierValue(rightNode.value);
+        let t = typeofValue[name]
         if (t) {
             v = `typeof ${checkScope(leftNode, clzCnt)} === "${t}"`;
             flag = false;
+        } else {
+            //检查name是不是interface
+            const impDict = clzCnt.impDict;
+            if (impDict.hasOwnProperty(name)) {
+                let ref = impDict[name];
+                v = `$H.isIfc(${checkScope(leftNode, clzCnt)},"${ref.fullName}")`;
+                flag = false;
+            }
         }
     }
 
