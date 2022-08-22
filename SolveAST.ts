@@ -1323,6 +1323,9 @@ function getFuncCallStr(node: AstNode, clzCnt: ClassContext) {
         const nameNode = children[i++];
         const conNode = children[i++];
         let name = checkScope(nameNode, clzCnt);
+        if (name === "trace") {
+            name = "console.log";
+        }
         //检查 name 是否有同引用值
         const conChildren = conNode.children;
         let imp = clzCnt.impDict[name];
@@ -1500,6 +1503,7 @@ function getAsStr(node: AstNode, clzCnt: ClassContext) {
 }
 
 function getAs(left: string, right: string) {
+    right = getTSType(right)
     if (right === "Array") {
         right = "any[]";
     } else if (right === "Object") {
