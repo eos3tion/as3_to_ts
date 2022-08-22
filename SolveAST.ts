@@ -9,6 +9,7 @@ type FileContext = {
     pathDict: { [path: string]: FileData }
     uriDict: { [uri: string]: FileData }
     nameDict: { [name: string]: FileData }
+    interfaces: string[]
 }
 
 type FileData = ReturnType<typeof getFile>;
@@ -77,7 +78,7 @@ function getFile(file: string, node: AstNode, baseDir: string) {
         name,
         path: importReplace(p),
         pkg: pkg,
-        fullName: `${pkg}.${name}`,
+        fullName: getFullName(pkg, name),
         node,
         file,
         imps,
@@ -147,31 +148,43 @@ export async function solveAst(dict: { [file: string]: AstNode }, callback: { (f
         fileDict[file] = fileData;
     }
 
+    let interfaces = [];
     const context = {
         pkgDict,
         pathDict,
         uriDict,
-        nameDict
+        nameDict,
+        interfaces
     }
 
     for (const file in dict) {
         if (filter(file) && !importFilter(path.relative(baseDir, file))) {
             const dat = fileDict[file];
             try {
-                await solveFileNode(dat, context).then(v => callback(file, v));
+                await solveFileNode(dat, context).then(v => callback(path.relative(baseDir, file).replace(".as", ".ts"), v));
             } catch (e) {
                 console.log(`处理[${file}]出错：\n`, e)
             }
         }
     }
+
+    if (interfaces.length) {
+        callback("interfaces.ts", interfaces.join("\n"));
+    }
 }
 
+function getFullName(pkg: string, name: string) {
+    if (pkg) {
+        name = `${pkg}.${name}`;
+    }
+    return name;
+}
 
 
 async function solveFileNode(data: FileData, cnt: FileContext) {
     const { imps, impStars, pkg, file, name: fileName, inPackage, outPackage } = data;
     const content = await fs.promises.readFile(file, "utf-8");
-    const { pkgDict, uriDict, nameDict } = cnt;
+    const { pkgDict, uriDict, nameDict, interfaces } = cnt;
 
     //基于imps和impStars，创建引用计数器
 
@@ -193,10 +206,10 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
                 const { clzs, ints } = dat.inPackage;
                 const pkg = dat.pkg;
                 for (let name in clzs) {
-                    impDict[name] = { pkg, name, fullName: `${pkg}.${name}`, count: 0 };
+                    impDict[name] = { pkg, name, fullName: getFullName(pkg, name), count: 0 };
                 }
                 for (let name in ints) {
-                    impDict[name] = { pkg, name, fullName: `${pkg}.${name}`, count: 0 };
+                    impDict[name] = { pkg, name, fullName: getFullName(pkg, name), count: 0 };
                 }
             }
         } else {
@@ -410,7 +423,7 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
             const dat = staticDict[key];
             if (dat.type === NodeName.FunctionNode) {
                 lines.push(getFunctionStr(dat, clzCnt, { noFunc: true, noBlock: true, addOptional: true }));
-                statFun.push(`"${key}", ${getFunctionStr(dat, clzCnt, { noName: true, noStatic: true, noIdent: true })}`)
+                statFun.push(`"${key}", ${getFunctionStr(dat, clzCnt, { noName: true, noStatic: true, noIdent: true })},`)
             }
         }
 
@@ -423,6 +436,15 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
             lines.push(`]);`);
         }
 
+        lines.push(`$H.clz(${name},"${getFullName(pkg, name)}",`);
+        if (impls) {
+            for (let i = 0; i < impls.length; i++) {
+                const v = impls[i];
+                let d = impDict[v];
+                lines.push(`"${d.fullName}",`)
+            }
+        }
+        lines.push(`)`);
 
         for (let i = 0; i < others.length; i++) {
             const other = others[i];
@@ -440,10 +462,11 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
 
         let extIdx = getChildIdx(children, 0, NodeName.KeywordNode, NodeID.KeywordExtendsID);
         let baseClassStr = "";
+        let impls = [] as string[];
         if (extIdx > -1) {
             let contNode = children[++extIdx];
             if (contNode.type === NodeName.TransparentContainerNode) {
-                let impls = getImpls(contNode, impDict);
+                impls = getImpls(contNode, impDict);
                 baseClassStr = ` extends ${impls.join(",")} `;
             }
         } else {
@@ -489,6 +512,18 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
             }
         }
         lines.push(`} `)
+        let baseImpStr = "";
+        if (impls && impls.length) {
+            let implFullName = [] as string[];
+            for (let i = 0; i < impls.length; i++) {
+                const v = impls[i];
+                let d = impDict[v];
+                implFullName.push(`"${d.fullName}",`)
+            }
+            baseImpStr = `, [${implFullName.join(",")}]`
+        }
+
+        interfaces.push(`$H.ifc("${getFullName(pkg, name)}"${baseImpStr})`);
         return lines.join("\n");
 
     }
@@ -539,9 +574,17 @@ function getTSType(type: string) {
     return type;
 }
 
-function getParamNodeString(node: AstNode, clzCnt: ClassContext) {
+interface GetParamNodeStringOpt {
+    noDefault?: boolean
+}
+
+function getParamNodeString(node: AstNode, clzCnt: ClassContext, opt?: GetParamNodeStringOpt) {
     const children = node.children;
+    const { noDefault } = opt || EmptyObj as GetParamNodeStringOpt;
     let [paramNameNode, paramTypeNode, defaultNode] = children;
+    if (noDefault) {
+        defaultNode = undefined;
+    }
     let v = "";
     if (node.start !== paramNameNode.start) {//检查是否是 `...`
         let p = clzCnt.content.substring(node.start, paramNameNode.start).trim();
@@ -572,7 +615,8 @@ function solveParam(paramNameNode: AstNode, paramTypeNode: AstNode, defaultNode:
     if (typeStr) {
         typeStr = `: ${getTSType(typeStr)}`;
     }
-    return `${solveIdentifierValue(paramNameNode.value)}${optStr}${typeStr}${defStr}`;
+    return `${solveIdentifierValue(paramNameNode.value)
+        }${optStr}${typeStr}${defStr} `;
 }
 
 function getNamespaceIdent(node: AstNode) {
@@ -645,9 +689,9 @@ function checkScope(node: AstNode, clzCnt: ClassContext, noAddThis?: boolean) {
         }
         if (!noAddThis) {
             if (v in dict || v in baseDict) {//成员变量
-                v = `this.${v}`;
+                v = `this.${v} `;
             } else if (v in staticDict || v in baseStaticDict) {
-                v = `${name}.${v}`;
+                v = `${name}.${v} `;
             } else {
                 noAddThis = true;
             }
@@ -666,7 +710,7 @@ function getLeftRightStr(node: AstNode, clzCnt: ClassContext, middle: string, ad
     const [leftNode, rightNode] = children;
     let left = checkScope(leftNode, clzCnt);
     let right = checkScope(rightNode, clzCnt);
-    let v = `${left}${middle}${right}`;
+    let v = `${left}${middle}${right} `;
     if (addBrakets) {
         v = `(${v})`;
     }
@@ -678,7 +722,7 @@ function getDynamicAccessStr(node: AstNode, clzCnt: ClassContext) {
     const [leftNode, rightNode] = children;
     let left = checkScope(leftNode, clzCnt);
     let right = checkScope(rightNode, clzCnt);
-    return `${left}[${right}]`;
+    return `${left} [${right}]`;
 }
 
 function getTernaryStr(node: AstNode, clzCnt: ClassContext) {
@@ -718,7 +762,7 @@ function getMemberAccessExpressionNodeStr(node: AstNode, clzCnt: ClassContext) {
     const [leftNode, rightNode] = children;
     let left = checkScope(leftNode, clzCnt);
     let right = getNodeStr(rightNode, clzCnt);
-    return `${left}.${right}`;
+    return `${left}.${right} `;
 }
 
 function getNodeStr(node: AstNode, clzCnt: ClassContext): string {
@@ -1008,7 +1052,7 @@ function getForLoopStr(node: AstNode, clzCnt: ClassContext) {
         } else {
             conStr = getConStr(conditionNode, clzCnt, ";");
         }
-        return `for(${conStr})${getBlockStr(contentNode, clzCnt)} `
+        return `for (${conStr})${getBlockStr(contentNode, clzCnt)} `
     }
 
     function sovleInLoop(nodeIn: AstNode, middle: string, clzCnt: ClassContext) {
@@ -1027,18 +1071,18 @@ function getForLoopStr(node: AstNode, clzCnt: ClassContext) {
             nameNode = varExpNode;
         }
         const name = solveIdentifierValue(nameNode.value);
-        return `${varStr}${name} ${middle} ${checkScope(listNode, clzCnt)}`
+        return `${varStr}${name} ${middle} ${checkScope(listNode, clzCnt)} `
     }
 }
 
 function getWhileLoopStr(node: AstNode, clzCnt: ClassContext) {
     const [conditionNode, contentNode] = node.children;
-    return `while(${getNodeStr(conditionNode, clzCnt)})${getBlockStr(contentNode, clzCnt)} `
+    return `while (${getNodeStr(conditionNode, clzCnt)})${getBlockStr(contentNode, clzCnt)} `
 }
 
 function getDoWhileLoopStr(node: AstNode, clzCnt: ClassContext) {
     const [contentNode, conditionNode] = node.children;
-    return `do${getBlockStr(contentNode, clzCnt)}while(${getNodeStr(conditionNode, clzCnt)}) `
+    return `do${getBlockStr(contentNode, clzCnt)} while (${getNodeStr(conditionNode, clzCnt)})`
 }
 interface GetFuncStrParam {
     noFunc?: boolean;
@@ -1090,7 +1134,7 @@ function getFunctionStr(node: AstNode, clzCnt: ClassContext, opts?: GetFuncStrPa
         } else if (type === NodeName.ContainerNode) {//处理参数
             let subs = child.children;
             for (let i = 0; i < subs.length; i++) {
-                params.push(getParamNodeString(subs[i], clzCnt));
+                params.push(getParamNodeString(subs[i], clzCnt, { noDefault: noBlock }));
             }
         } else if (type === NodeName.ScopedBlockNode) {
             block = child;
@@ -1135,7 +1179,7 @@ function getFunctionStr(node: AstNode, clzCnt: ClassContext, opts?: GetFuncStrPa
     if (noIdent) {
         ident = "";
     }
-    let v = isConstructor ? `constructor(${paramsStr})` : `${ident}${override}${getStaticString(isStatic)}${funcStr}${nameStr}${optStr}(${paramsStr})`;
+    let v = isConstructor ? `constructor(${paramsStr})` : `${ident}${override}${getStaticString(isStatic)}${funcStr}${nameStr}${optStr} (${paramsStr})`;
     return v + retType + blockStr;
 }
 
@@ -1172,7 +1216,7 @@ function getSetterStr(node: AstNode, clzCnt: ClassContext) {
         }
     }
 
-    let v = `${ident}${getStaticString(isStatic)}set ${name} (${paramString}) `;
+    let v = `${ident}${getStaticString(isStatic)}set ${name} (${paramString})`;
     if (block) {
         v += getBlockStr(block, clzCnt);
     }
@@ -1222,7 +1266,7 @@ function getGetterStr(node: AstNode, clzCnt: ClassContext) {
     if (retNode) {
         retType = ": " + getTSType(checkScope(retNode, clzCnt));
     }
-    return `${ident}${getStaticString(isStatic)}get ${name} ()${retType}${blockStr}`;
+    return `${ident}${getStaticString(isStatic)}get ${name} ()${retType}${blockStr} `;
 }
 
 
@@ -1262,7 +1306,7 @@ function getArrStr(node: AstNode, clzCnt: ClassContext) {
 
 function getTypedExpressStr(node: AstNode, clzCnt: ClassContext) {
     const [_, typeNode] = node.children;
-    return `Array<${getArrayType(typeNode, clzCnt)}>`;
+    return `Array < ${getArrayType(typeNode, clzCnt)}> `;
 }
 
 function getVecStr(node: AstNode, clzCnt: ClassContext) {
@@ -1276,7 +1320,7 @@ function getVecStr(node: AstNode, clzCnt: ClassContext) {
             lines.push(getNodeStr(child, clzCnt));
         }
         let type = getArrayType(idNode, clzCnt);
-        v = `Array<${type}>(${lines.join(", ")})`;
+        v = `Array < ${type}> (${lines.join(", ")})`;
     }
     return v;
 }
@@ -1341,7 +1385,7 @@ function getConStr(node: AstNode, clzCnt: ClassContext, spe = "") {
         pre = "(";
         suf = ")";
     }
-    return `${pre}${childs.join(spe)}${suf}`
+    return `${pre}${childs.join(spe)}${suf} `
 }
 
 
@@ -1407,7 +1451,7 @@ function getTryStr(node: AstNode, clzCnt: ClassContext) {
         }
     }
     if (!hasCatch) {
-        v += `catch{\n}`
+        v += `catch { \n } `
     }
     return v;
 }
@@ -1483,7 +1527,7 @@ function getSwitchStr(node: AstNode, clzCnt: ClassContext) {
     const [condNode, cntNode] = children;
     let v = `switch (${checkScope(condNode, clzCnt)
         }) {
-\n`;
+    \n`;
     const cases = cntNode.children;
     for (let i = 0; i < cases.length; i++) {
         const caseNode = cases[i];
@@ -1549,5 +1593,5 @@ function getAs(left: string, right: string) {
     } else if (right === "Object") {
         right = "any";
     }
-    return `${left} as ${right}`
+    return `${left} as ${right} `
 }

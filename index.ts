@@ -32,7 +32,7 @@ function mkdirs(dir: string) {
 
 readAstFile("ast.txt", dict => {
     solveAst(dict, (file, cnt) => {
-        const p = path.join(outDir, path.relative(inputBaseDir, file).replace(".as", ".ts"));
+        const p = path.join(outDir, file);
         mkdirs(path.dirname(p));
         fs.writeFileSync(p, formatContent(cnt));
     }, inputBaseDir, file => file.indexOf("libs\\laya") == -1);

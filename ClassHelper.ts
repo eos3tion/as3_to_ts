@@ -18,7 +18,7 @@ module $H {
 
     const classes = {} as { [name: string]: Class }
     const interfaces = {} as { [name: string]: Interface }
-    export function clz(ref: Class, name: string, interfaces: string[]) {
+    export function clz(ref: Class, name: string, interfaces?: string[]) {
         classes[name] = ref;
         const proto = ref.prototype;
         proto.className = name;
