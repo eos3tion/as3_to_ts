@@ -38,7 +38,7 @@ module $H {
         }
     }
     const willChecked = [] as string[];
-    export function isIfc<T extends LayaASClass>(ref: T, inter: string) {
+    export function isIfc(ref: any, inter: string) {
         const ints = ref.interfaces;
         if (ints) {
             willChecked.length = 0;
