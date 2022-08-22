@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 import { ClassData, getClassData, isScopeNode } from "./GetScopeData";
 import { getChildIdx, solveIdentifierValue } from "./Helper";
+import { importFilter } from "./LayaIFFlasth";
 
 type FileContext = {
     pkgDict: { [pkg: string]: FileData[] },
@@ -126,6 +127,9 @@ export async function solveAst(dict: { [file: string]: AstNode }, callback: { (f
     const uriDict = {} as { [uri: string]: FileData };
     const nameDict = {} as { [name: string]: FileData }
     for (const file in dict) {
+        if (importFilter(path.relative(baseDir, file))) {
+            continue
+        }
         const fileData = getFile(file, dict[file], baseDir);
         const pkg = fileData.pkg;
         let list = pkgDict[pkg];
