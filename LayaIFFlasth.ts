@@ -37,3 +37,13 @@ const list = [
 export function importFilter(fullName: string) {
     return list.indexOf(fullName) > -1
 }
+
+
+const replacer = {
+    "libs\\laya\\src\\laya\\webgl\\resource\\Texture2D": "libs\\laya\\resource\\Texture2D",
+    "libs\\laya\\src\\laya\\webgl\\resource\\BaseTexture": "libs\\laya\\resource\\BaseTexture"
+}
+
+export function importReplace(fullName: string) {
+    return replacer[fullName] || fullName;
+}

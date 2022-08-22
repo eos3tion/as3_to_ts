@@ -2,7 +2,7 @@ import fs from "fs";
 import path from "path";
 import { ClassData, getClassData, isScopeNode } from "./GetScopeData";
 import { appendTo, getChildIdx, solveIdentifierValue } from "./Helper";
-import { importFilter } from "./LayaIFFlasth";
+import { importFilter, importReplace } from "./LayaIFFlasth";
 const EmptyObj = Object.freeze({});
 type FileContext = {
     pkgDict: { [pkg: string]: FileData[] },
@@ -75,7 +75,7 @@ function getFile(file: string, node: AstNode, baseDir: string) {
     }
     return {
         name,
-        path: p,
+        path: importReplace(p),
         pkg: pkg,
         fullName: `${pkg}.${name}`,
         node,
@@ -412,7 +412,7 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
             const dat = staticDict[key];
             if (dat.type === NodeName.FunctionNode) {
                 lines.push(getFunctionStr(dat, clzCnt, { noFunc: true, noBlock: true, addOptional: true }));
-                statFun.push(`"${key}", ${getFunctionStr(dat, clzCnt, { noName: true, noStatic: true })}`)
+                statFun.push(`"${key}", ${getFunctionStr(dat, clzCnt, { noName: true, noStatic: true, noIdent: true })}`)
             }
         }
 
@@ -1050,10 +1050,12 @@ interface GetFuncStrParam {
     addOptional?: boolean;
     noName?: boolean;
     noStatic?: boolean;
+
+    noIdent?: boolean;
 }
 
 function getFunctionStr(node: AstNode, clzCnt: ClassContext, opts?: GetFuncStrParam) {
-    const { noFunc, isConstructor, addSuper, noBlock, noName, noStatic, addOptional } = opts || EmptyObj as GetFuncStrParam;
+    const { noFunc, isConstructor, addSuper, noBlock, noName, noStatic, addOptional, noIdent } = opts || EmptyObj as GetFuncStrParam;
     const children = node.children;
     let ident = "";
     let name: string;
@@ -1131,6 +1133,9 @@ function getFunctionStr(node: AstNode, clzCnt: ClassContext, opts?: GetFuncStrPa
     let optStr = "";
     if (addOptional) {
         optStr = "?";
+    }
+    if (noIdent) {
+        ident = "";
     }
     let v = isConstructor ? `constructor(${paramsStr})` : `${ident}${override}${getStaticString(isStatic)}${funcStr}${nameStr}${optStr}(${paramsStr})`;
     return v + retType + blockStr;
