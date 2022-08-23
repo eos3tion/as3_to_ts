@@ -21,7 +21,17 @@ module $H {
     export function clz(ref: Class, name: string, interfaces?: string[]) {
         classes[name] = ref;
         const proto = ref.prototype;
-        proto.className = name;
+        let define = Object.getOwnPropertyDescriptor(proto, "className");
+        if (define && define.get && !define.set) {
+            proto.constructor.__className = name;
+        } else {
+            Object.defineProperty(proto, "className", {
+                value: name,
+                configurable: true,
+                enumerable: false,
+                writable: true
+            })
+        }
         proto.interfaces = interfaces;
     }
 
