@@ -772,6 +772,8 @@ function getIfNodeStr(node: AstNode, clzCnt: ClassContext) {
             } else {
                 console.log(`条件节点没有2个子节点`, child);
             }
+        } else {
+            lines.push(getNodeStr(child, clzCnt));
         }
     }
     return lines.join("\n");
