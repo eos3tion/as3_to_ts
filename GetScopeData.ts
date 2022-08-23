@@ -30,7 +30,8 @@ export function getClassData(node: AstNode) {
         constructors: [] as AstNode[],
         setterDict: {} as ClassDict,
         staticDict: {} as ClassDict,
-        node
+        node,
+        enumData: undefined as string[]
     }
 
     let scopeIdx = getChildIdx(children, extIdx, NodeName.ScopedBlockNode);
@@ -48,6 +49,7 @@ export function getClassData(node: AstNode) {
         // 暂时不区分 public 还是 private protected
         // const pubDict = {} as ClassDict;
         //第一次遍历，得到类中`属性 / 方法`
+        let staticVarOnly = true;
         for (let i = 0; i < children.length; i++) {
             const child = children[i];
             const type = child.type;
@@ -59,11 +61,18 @@ export function getClassData(node: AstNode) {
                 case NodeName.SetterNode:
                     name = getFunctionName(child);
                     isStatic = getIsStatic(child);
+                    staticVarOnly = false;
                     checkFunctionScope(child);
                     break;
                 case NodeName.VariableNode:
                     name = getVariableName(child);
                     isStatic = getIsStatic(child);
+                    if (!isStatic) {
+                        staticVarOnly = false;
+                    }
+                    break;
+                default:
+                    staticVarOnly = false;
                     break;
             }
             if (name) {
@@ -81,6 +90,32 @@ export function getClassData(node: AstNode) {
                 }
             } else {
                 others.push(child);
+            }
+        }
+
+        if (staticVarOnly) {
+            let enumable = true;
+            let enumData = [] as string[];
+            //检查是否都有默认值，并且值只有字符串和数值类型
+            for (let name in staticDict) {
+                const child = staticDict[name];
+                const children = child.children;
+                const keyNodeIdx = getChildIdx(children, 0, NodeName.KeywordNode);
+                if (keyNodeIdx > -1) {
+                    const defNode = children[keyNodeIdx + 3];
+                    if (defNode) {
+                        const type = defNode.type;
+                        if (type === NodeName.NumericLiteralNode || type === NodeName.LiteralNode) {
+                            enumData.push(`${name} = ${defNode.value[1]},`)
+                        } else {
+                            enumable = false;
+                            break
+                        }
+                    }
+                }
+            }
+            if (enumable) {
+                classData.enumData = enumData;
             }
         }
     }

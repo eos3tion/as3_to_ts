@@ -308,7 +308,15 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
 
 
     function solveClass(classData: ClassData, exp: boolean) {
-        const { baseClass, dict, staticDict, others, constructors, name, setterDict, node } = classData;
+        const { baseClass, dict, staticDict, others, constructors, name, setterDict, node, enumData } = classData;
+
+        const lines = [] as string[];
+        if (Config.useConstEnumForLiteralClass && enumData) {
+            lines.push(`export const enum ${name}{`);
+            appendTo(enumData, lines);
+            lines.push(`}`);
+            return lines.join("\n");
+        }
         let baseClassStr = "";
         let baseDict = {} as { [name: string]: true };
         let baseStaticDict = {} as { [name: string]: true };
@@ -332,7 +340,6 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
             implStr = ` implements ${impls.join(",")} `
         }
 
-        const lines = [] as string[];
         let expStr = "";
         if (exp) {
             expStr = "export "
