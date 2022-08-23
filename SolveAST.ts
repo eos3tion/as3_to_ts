@@ -1326,7 +1326,7 @@ function getArrStr(node: AstNode, clzCnt: ClassContext) {
 
 function getTypedExpressStr(node: AstNode, clzCnt: ClassContext) {
     const [_, typeNode] = node.children;
-    return `Array < ${getArrayType(typeNode, clzCnt)}> `;
+    return `Array<${getArrayType(typeNode, clzCnt)}>`;
 }
 
 function getVecStr(node: AstNode, clzCnt: ClassContext) {
@@ -1340,7 +1340,7 @@ function getVecStr(node: AstNode, clzCnt: ClassContext) {
             lines.push(getNodeStr(child, clzCnt));
         }
         let type = getArrayType(idNode, clzCnt);
-        v = `Array < ${type}> (${lines.join(", ")})`;
+        v = `Array<${type}>(${lines.join(", ")})`;
     }
     return v;
 }
@@ -1358,8 +1358,11 @@ function getArrayType(node: AstNode, clzCnt: ClassContext) {
     return type;
 }
 
+function isSynthesizedNode(node: AstNode) {
+    return node.value === "SYNTHESIZED";
+}
 function getBlockStr(node: AstNode, clzCnt: ClassContext, addSuper?: boolean) {
-    let isSynthesized = node.value === "SYNTHESIZED";
+    let isSynthesized = isSynthesizedNode(node);
 
     let lines = [] as string[];
     if (!isSynthesized) {
@@ -1401,7 +1404,7 @@ function getConStr(node: AstNode, clzCnt: ClassContext, spe = "") {
     }
     let pre = "";
     let suf = "";
-    if (node.value !== "SYNTHESIZED") {
+    if (!isSynthesizedNode(node)) {
         pre = "(";
         suf = ")";
     }
@@ -1447,11 +1450,21 @@ function getFuncCallStr(node: AstNode, clzCnt: ClassContext) {
         }
         if (!isAs) {
             v += name;
-
-            if (isNew && nameNode.type === NodeName.TypedExpressionNode && conChildren.length > 1) {//as3 new Vector只有2个参数，第一个是长度，第二个为是否是固定长度的参数
-                const lenNode = conChildren[0];
-                v += `(${checkScope(lenNode, clzCnt)})`
-            } else {
+            let solved = false;
+            if (isNew) {//as3 new Vector只有2个参数，第一个是长度，第二个为是否是固定长度的参数
+                const nameNodeType = nameNode.type;
+                if (nameNodeType === NodeName.TypedExpressionNode) {
+                    if (conChildren.length > 1) {
+                        const lenNode = conChildren[0];
+                        v += `(${checkScope(lenNode, clzCnt)})`
+                        solved = true;
+                    }
+                } else if (nameNodeType === NodeName.VectorLiteralNode) {
+                    v += getConStr(conNode, clzCnt, ",");
+                    solved = true;
+                }
+            }
+            if (!solved) {
                 v += `(${getConStr(conNode, clzCnt, ",")})`;
             }
         }
