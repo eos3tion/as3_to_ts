@@ -1,8 +1,8 @@
 export const Config = {
     /**
-     * 是否使用ClassHelper处理static function
+     * 是否使用ClassHelper处理static var
      */
-    useHelperForStaticFun: false,
+    useHelperForStaticGetter: true,
     /**
      * 是否使用 const enum XXX {} 处理全Literal类型的class
      */

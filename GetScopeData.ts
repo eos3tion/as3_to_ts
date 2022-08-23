@@ -31,7 +31,8 @@ export function getClassData(node: AstNode) {
         setterDict: {} as ClassDict,
         staticDict: {} as ClassDict,
         node,
-        enumData: undefined as string[]
+        enumData: undefined as string[],
+        staVarWithFunCall: {} as { [name: string]: AstNode },
     }
 
     let scopeIdx = getChildIdx(children, extIdx, NodeName.ScopedBlockNode);
@@ -45,7 +46,7 @@ export function getClassData(node: AstNode) {
 
     function solveClassScope(node: AstNode, classData: ClassData) {
         const children = node.children;
-        const { dict, constructors, others, name: className, setterDict, staticDict } = classData;
+        const { dict, constructors, others, name: className, setterDict, staticDict, staVarWithFunCall } = classData;
         // 暂时不区分 public 还是 private protected
         // const pubDict = {} as ClassDict;
         //第一次遍历，得到类中`属性 / 方法`
@@ -108,6 +109,9 @@ export function getClassData(node: AstNode) {
                         if (type === NodeName.NumericLiteralNode || type === NodeName.LiteralNode) {
                             enumData.push(`${name} = ${defNode.value[1]},`)
                         } else {
+                            if (type === NodeName.FunctionCallNode) {
+                                staVarWithFunCall[name] = defNode;
+                            }
                             enumable = false;
                             break
                         }

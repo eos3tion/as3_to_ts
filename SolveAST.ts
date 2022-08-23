@@ -187,6 +187,7 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
     const content = await fs.promises.readFile(file, "utf-8");
     const { pkgDict, uriDict, nameDict, interfaces } = cnt;
 
+    const baseClasses = {} as { [name: string]: true };
     //基于imps和impStars，创建引用计数器
 
     const impDict = {} as { [name: string]: ImpRefs };
@@ -229,9 +230,9 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
         baseDict: {},
         impDict
     };
+
     v = solvePackageScope(v, inPackage, true);
     v = solvePackageScope(v, outPackage, false);
-
 
 
 
@@ -249,8 +250,12 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
                 //laya路径特殊处理
                 //laya的as3项目目录结构为`libs/laya/src/`，而ts项目为`libs`
                 rela = rela.replace("laya/src/", "");
-
-                v = `import {${name}} from "${rela}"\n` + v;
+                let imp = `import {${name}} from "${rela}"`;
+                if (baseClasses[impDat.name]) {
+                    v = imp + "\n" + v;
+                } else {
+                    v += "\n" + imp;
+                }
             }
         }
     }
@@ -308,7 +313,7 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
 
 
     function solveClass(classData: ClassData, exp: boolean) {
-        const { baseClass, dict, staticDict, others, constructors, name, setterDict, node, enumData } = classData;
+        const { baseClass, dict, staticDict, others, constructors, name, setterDict, node, enumData, staVarWithFunCall } = classData;
 
         const lines = [] as string[];
         if (Config.useConstEnumForLiteralClass && enumData) {
@@ -317,12 +322,15 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
             lines.push(`}`);
             return lines.join("\n");
         }
+
+        let statFun = [] as string[];
         let baseClassStr = "";
         let baseDict = {} as { [name: string]: true };
         let baseStaticDict = {} as { [name: string]: true };
         if (baseClass && baseClass !== "Object") {
             baseClassStr = ` extends ${baseClass}`;
             getBaseDict(classData, baseDict, baseStaticDict);
+            baseClasses[baseClass] = true;
         }
         const nodeChildren = node.children;
 
@@ -369,8 +377,14 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
         for (let key in staticDict) {
             const dat = staticDict[key];
             if (dat.type === NodeName.VariableNode) {
-                lines.push(getVarStr(dat, clzCnt, true));
-                lines.push("");
+                if (Config.useHelperForStaticGetter && staVarWithFunCall[key]) {
+                    const defNode = staVarWithFunCall[key];
+                    lines.push(getVarStr(dat, clzCnt, true, true));
+                    statFun.push(`"${key}", function(){ ${getNodeStr(defNode, clzCnt)} },`)
+                } else {
+                    lines.push(getVarStr(dat, clzCnt, true));
+                    lines.push("");
+                }
             }
         }
 
@@ -424,18 +438,11 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
                 lines.push("");
             }
         }
-
-        let statFun = [] as string[];
         //最后附加函数
         for (let key in staticDict) {
             const dat = staticDict[key];
             if (dat.type === NodeName.FunctionNode) {
-                if (Config.useHelperForStaticFun) {
-                    lines.push(getFunctionStr(dat, clzCnt, { noFunc: true, noBlock: true, addOptional: true }));
-                    statFun.push(`"${key}", ${getFunctionStr(dat, clzCnt, { noName: true, noStatic: true, noIdent: true })},`)
-                } else {
-                    lines.push(getFunctionStr(dat, clzCnt, { noFunc: true }));
-                }
+                lines.push(getFunctionStr(dat, clzCnt, { noFunc: true }));
             }
         }
 
@@ -976,7 +983,7 @@ function getNodeStr(node: AstNode, clzCnt: ClassContext): string {
     }
 }
 
-function getVarStr(node: AstNode, clzCnt: ClassContext, isClass?: boolean) {
+function getVarStr(node: AstNode, clzCnt: ClassContext, isClass?: boolean, noDefault?: boolean) {
     const children = node.children;
     let ident = "";
     let find = 0;
@@ -1016,7 +1023,7 @@ function getVarStr(node: AstNode, clzCnt: ClassContext, isClass?: boolean) {
     const nameNode = children[find];
     const typeNode = children[find + 1];
     let defaultNode = children[find + 2];
-    if (defaultNode && defaultNode.type === NodeName.ChainedVariableNode) {
+    if (defaultNode && defaultNode.type === NodeName.ChainedVariableNode || noDefault) {
         defaultNode = undefined;
     }
     let v = solveParam(nameNode, typeNode, defaultNode, clzCnt);
@@ -1246,7 +1253,7 @@ function getSetterStr(node: AstNode, clzCnt: ClassContext) {
 }
 
 
-function getGetterStr(node: AstNode, clzCnt: ClassContext) {
+function getGetterStr(node: AstNode, clzCnt: ClassContext, isStaticInterface?: boolean) {
     const children = node.children;
     let ident = "";
     let isStatic = false;
@@ -1277,7 +1284,7 @@ function getGetterStr(node: AstNode, clzCnt: ClassContext) {
     }
 
     let blockStr = "";
-    if (block) {
+    if (!isStaticInterface && block) {
         blockStr = getBlockStr(block, clzCnt);
     }
     if (blockStr) {
@@ -1288,7 +1295,11 @@ function getGetterStr(node: AstNode, clzCnt: ClassContext) {
     if (retNode) {
         retType = ": " + getTSType(checkScope(retNode, clzCnt));
     }
-    return `${ident}${getStaticString(isStatic)}get ${name} ()${retType}${blockStr} `;
+    if (isStaticInterface) {
+        return `static ${name}${retType}`;
+    } else {
+        return `${ident}${getStaticString(isStatic)}get ${name} ()${retType}${blockStr} `;
+    }
 }
 
 
