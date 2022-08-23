@@ -3,6 +3,7 @@ import path from "path";
 import { ClassData, getClassData, isScopeNode } from "./GetScopeData";
 import { appendTo, getChildIdx, solveIdentifierValue } from "./Helper";
 import { importFilter, importReplace } from "./LayaIFFlasth";
+import { Config } from "./Config";
 const EmptyObj = Object.freeze({});
 type FileContext = {
     pkgDict: { [pkg: string]: FileData[] },
@@ -422,8 +423,12 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
         for (let key in staticDict) {
             const dat = staticDict[key];
             if (dat.type === NodeName.FunctionNode) {
-                lines.push(getFunctionStr(dat, clzCnt, { noFunc: true, noBlock: true, addOptional: true }));
-                statFun.push(`"${key}", ${getFunctionStr(dat, clzCnt, { noName: true, noStatic: true, noIdent: true })},`)
+                if (Config.useHelperForStaticFun) {
+                    lines.push(getFunctionStr(dat, clzCnt, { noFunc: true, noBlock: true, addOptional: true }));
+                    statFun.push(`"${key}", ${getFunctionStr(dat, clzCnt, { noName: true, noStatic: true, noIdent: true })},`)
+                } else {
+                    lines.push(getFunctionStr(dat, clzCnt, { noFunc: true }));
+                }
             }
         }
 
