@@ -109,11 +109,8 @@ export function getClassData(node: AstNode) {
                         if (type === NodeName.NumericLiteralNode || type === NodeName.LiteralNode) {
                             enumData.push(`${name} = ${defNode.value[1]},`)
                         } else {
-                            if (type === NodeName.FunctionCallNode) {
-                                staVarWithFunCall[name] = defNode;
-                            }
+                            staVarWithFunCall[name] = defNode;
                             enumable = false;
-                            break
                         }
                     }
                 }
