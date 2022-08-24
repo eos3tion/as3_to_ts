@@ -317,8 +317,33 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
 
         const lines = [] as string[];
         if (Config.useConstEnumForLiteralClass && enumData) {
+            const cnt = {
+                name,
+                staticDict: {},
+                baseStaticDict: {},
+                content,
+                dict: {},
+                baseDict: {},
+                impDict,
+            }
             lines.push(`export const enum ${name}{`);
-            appendTo(enumData, lines);
+            let backlines = [] as string[];
+            for (let name in enumData) {
+                const node = enumData[name];
+                const type = node.type;
+                if (type === NodeName.NumericLiteralNode || type === NodeName.LiteralNode) {
+                    let v = getLiteralStr(node, cnt);
+                    if (v === "true") {
+                        v = "1";
+                    } else if (v === "false") {
+                        v = "0";
+                    }
+                    lines.push(`${name} = ${v},`)
+                } else {
+                    backlines.push(`${name} = ${getNodeStr(node, cnt)},`);
+                }
+            }
+            appendTo(backlines, lines);
             lines.push(`}`);
             return lines.join("\n");
         }

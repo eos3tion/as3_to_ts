@@ -1,4 +1,4 @@
-import { getChildIdx, solveIdentifierValue } from "./Helper";
+import { getChildIdx, solveIdentifierValue, walkChildren } from "./Helper";
 
 
 
@@ -31,7 +31,7 @@ export function getClassData(node: AstNode) {
         setterDict: {} as ClassDict,
         staticDict: {} as ClassDict,
         node,
-        enumData: undefined as string[],
+        enumData: undefined as { [name: string]: AstNode },
         staVarWithFunCall: {} as { [name: string]: AstNode },
     }
 
@@ -50,7 +50,7 @@ export function getClassData(node: AstNode) {
         // 暂时不区分 public 还是 private protected
         // const pubDict = {} as ClassDict;
         //第一次遍历，得到类中`属性 / 方法`
-        let staticVarOnly = true;
+        let staticOnly = true;
         for (let i = 0; i < children.length; i++) {
             const child = children[i];
             const type = child.type;
@@ -62,28 +62,25 @@ export function getClassData(node: AstNode) {
                 case NodeName.SetterNode:
                     name = getFunctionName(child);
                     isStatic = getIsStatic(child);
-                    staticVarOnly = false;
                     checkFunctionScope(child);
                     break;
                 case NodeName.VariableNode:
                     name = getVariableName(child);
                     isStatic = getIsStatic(child);
-                    if (!isStatic) {
-                        staticVarOnly = false;
-                    }
                     break;
                 default:
-                    staticVarOnly = false;
                     break;
             }
             if (name) {
-                if (className === name) {
+                if (!isStatic && className === name) {
                     constructors.push(child);
+                    staticOnly = false;
                 } else {
                     if (isStatic) {
                         staticDict[name] = child;
                     } else {
                         dict[name] = child;
+                        staticOnly = false;
                     }
                     if (type === NodeName.SetterNode) {
                         setterDict[name] = child;
@@ -94,31 +91,53 @@ export function getClassData(node: AstNode) {
             }
         }
 
-        if (staticVarOnly) {
-            let enumable = true;
-            let enumData = [] as string[];
-            //检查是否都有默认值，并且值只有字符串和数值类型
-            for (let name in staticDict) {
-                const child = staticDict[name];
-                const children = child.children;
-                const keyNodeIdx = getChildIdx(children, 0, NodeName.KeywordNode);
-                if (keyNodeIdx > -1) {
-                    const defNode = children[keyNodeIdx + 3];
-                    if (defNode) {
-                        const type = defNode.type;
-                        if (type === NodeName.NumericLiteralNode || type === NodeName.LiteralNode) {
-                            enumData.push(`${name} = ${defNode.value[1]},`)
-                        } else {
-                            staVarWithFunCall[name] = defNode;
-                            enumable = false;
+
+        let enumable = staticOnly;
+        let hasEnum = false;
+        let enumData = {} as { [name: string]: AstNode };
+        //检查是否都有默认值，并且值只有字符串和数值类型
+        for (let name in staticDict) {
+            const child = staticDict[name];
+            if (child.type !== NodeName.VariableNode) {
+                enumable = false;
+                continue
+            }
+            const children = child.children;
+            const keyNodeIdx = getChildIdx(children, 0, NodeName.KeywordNode);
+            if (keyNodeIdx > -1) {
+                const defNode = children[keyNodeIdx + 3];
+                if (defNode) {
+                    //defNode中，不能有funCall
+                    const result = walkChildren(defNode, tester => {
+                        const ttype = tester.type;
+                        if (ttype === NodeName.FunctionCallNode || ttype === NodeName.ObjectLiteralNode || ttype === NodeName.ArrayLiteralNode || ttype === NodeName.VectorLiteralNode) {
+                            return true;
+                        } else if (ttype === NodeName.MemberAccessExpressionNode) {
+                            //检查主体是不是本身
+                            const [left] = tester.children;
+                            let val = solveIdentifierValue(left.value);
+                            if (val !== className) {
+                                return true;
+                            }
                         }
+                    })
+
+                    if (result) {
+                        staVarWithFunCall[name] = defNode;
+                        enumable = false;
+                    } else {
+                        hasEnum = true;
+                        enumData[name] = defNode;
                     }
                 }
             }
-            if (enumable) {
-                classData.enumData = enumData;
-            }
+
         }
+
+        if (enumable && hasEnum) {
+            classData.enumData = enumData;
+        }
+
     }
 
     function getIsStatic(node: AstNode) {

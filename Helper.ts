@@ -16,6 +16,21 @@ export function getChildIdx(children: AstNode[], start: number, type: NodeName, 
     return -1;
 }
 
+export function walkChildren<T>(node: AstNode, checker: { (node: AstNode): T }) {
+    const willChecked = [node];
+    while (willChecked.length) {
+        let cur = willChecked.pop();
+        let result = checker(cur);
+        if (result) {
+            return result;
+        }
+        let children = cur.children;
+        for (let i = 0; i < children.length; i++) {
+            willChecked.push(children[i]);
+        }
+    }
+}
+
 export function getParent(node: AstNode, type: NodeName, maxLevel = Infinity, id?: NodeID) {
     let parent = node.parent;
     let level = 1;
