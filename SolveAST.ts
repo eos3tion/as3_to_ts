@@ -491,11 +491,11 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
             impStr = `, [\n${impLines.join(",\n")}\n]`;
         }
 
-        lines.push(`$H.clz(${name},"${getFullName(pkg, name)}"${impStr})`);
+        lines.push(`$H.clz(${name},"${getFullName(pkg, name)}"${impStr});`);
 
         for (let i = 0; i < others.length; i++) {
             const other = others[i];
-            lines.push(getNodeStr(other, clzCnt));
+            lines.push(getNodeStr(other, clzCnt) + ";");
             lines.push("");
         }
         return lines.join("\n");
@@ -570,7 +570,7 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
             baseImpStr = `, [${implFullName.join(",")}]`
         }
 
-        interfaces.push(`$H.ifc("${getFullName(pkg, name)}"${baseImpStr})`);
+        interfaces.push(`$H.ifc("${getFullName(pkg, name)}"${baseImpStr});`);
         return lines.join("\n");
 
     }
