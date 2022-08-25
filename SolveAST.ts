@@ -1037,7 +1037,7 @@ function getVarStr(node: AstNode, clzCnt: ClassContext, isClass?: boolean, noDef
         if (isConst) {
             val = "const ";
         } else {
-            val = "var ";
+            val = Config.changeVarToLet ? "let " : "var ";
         }
     }
 
@@ -1114,7 +1114,7 @@ function getForLoopStr(node: AstNode, clzCnt: ClassContext) {
             const first = varChildren[0];
             nameNode = first;
             if (first.type === NodeName.KeywordNode) {
-                varStr = "var "
+                varStr = "let "
                 nameNode = varChildren[1];
             }
         } else {
