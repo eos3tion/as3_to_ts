@@ -206,10 +206,15 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
         if (data) {
             const idx = imp.lastIndexOf(".");
             const name = imp.slice(idx + 1);
-            let cData = data?.inPackage?.clzs?.[name];
-            if (cData && !cData.isEnum()) {
-                const pkg = imp.slice(0, idx);
-                impDict[name] = { name, fullName: imp, count: 0, pkg }
+            let inPackage = data.inPackage;
+            if (inPackage) {
+                const { clzs, ints } = inPackage;
+                let cData = clzs?.[name];
+                let impflag = cData && !cData.isEnum() || ints?.[name];
+                if (impflag) {
+                    const pkg = imp.slice(0, idx);
+                    impDict[name] = { name, fullName: imp, count: 0, pkg }
+                }
             }
         }
     }
