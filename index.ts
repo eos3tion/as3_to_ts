@@ -36,7 +36,7 @@ readAstFile("ast.txt", dict => {
         const p = path.join(outDir, file);
         mkdirs(path.dirname(p));
         if (Config.addFileTrace) {
-            cnt = `console.log(${file})\n` + cnt;
+            cnt = `console.log("${file.replace("\\", "/")}")\n` + cnt;
         }
         fs.writeFileSync(p, formatContent(cnt));
     }, inputBaseDir, file => file.indexOf("libs\\laya") == -1);
