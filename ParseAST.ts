@@ -53,7 +53,10 @@ export function readAstFile(file: string, callback: { (dict: { [file: string]: A
         while (true) {
             const tester = data[i++];
             if (tester === "?:?" || /^\d+:\d+$/.test(tester)) {
-                break;
+                //多检查一下下一个数据
+                if (data[i] === "loc:") {
+                    break;
+                }
             }
             if (i > dataLen) {
                 return
