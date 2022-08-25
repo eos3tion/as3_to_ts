@@ -1,3 +1,4 @@
+import { Config } from "./Config";
 import { getChildIdx, solveIdentifierValue, walkChildren } from "./Helper";
 
 
@@ -33,6 +34,7 @@ export function getClassData(node: AstNode) {
         node,
         enumData: undefined as { [name: string]: AstNode },
         staVarWithFunCall: {} as { [name: string]: AstNode },
+        isEnum
     }
 
     let scopeIdx = getChildIdx(children, extIdx, NodeName.ScopedBlockNode);
@@ -42,7 +44,9 @@ export function getClassData(node: AstNode) {
     }
 
     return classData;
-
+    function isEnum(this: ClassData) {
+        return this.enumData && Config.useConstEnumForLiteralClass;
+    }
 
     function solveClassScope(node: AstNode, classData: ClassData) {
         const children = node.children;
