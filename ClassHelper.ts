@@ -77,7 +77,8 @@ module $H {
                 _class.length = def[i + 1].call(_class);
             else {
                 (function () {
-                    const [name, getfn] = def;
+                    const name = def[i];
+                    const getfn = def[i + 1];
                     Object.defineProperty(_class, name, {
                         get() {
                             delete this[name];
