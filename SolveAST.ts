@@ -251,11 +251,7 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
                 //laya的as3项目目录结构为`libs/laya/src/`，而ts项目为`libs`
                 rela = rela.replace("laya/src/", "");
                 let imp = `import {${name}} from "${rela}"`;
-                if (baseClasses[impDat.name]) {
-                    v = imp + "\n" + v;
-                } else {
-                    v += "\n" + imp;
-                }
+                v = imp + "\n" + v;
             }
         }
     }
