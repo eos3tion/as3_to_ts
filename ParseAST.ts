@@ -52,7 +52,7 @@ export function readAstFile(file: string, callback: { (dict: { [file: string]: A
         let dataLen = data.length;
         while (true) {
             const tester = data[i++];
-            if (tester === "?:?" || /\d+:\d+/.test(tester)) {
+            if (tester === "?:?" || /^\d+:\d+$/.test(tester)) {
                 break;
             }
             if (i > dataLen) {
