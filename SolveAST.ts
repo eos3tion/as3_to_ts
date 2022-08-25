@@ -7,8 +7,17 @@ import { Config } from "./Config";
 const EmptyObj = Object.freeze({});
 type FileContext = {
     pkgDict: { [pkg: string]: FileData[] },
+    /**
+     * path 形如 `com/package/XXX`
+     */
     pathDict: { [path: string]: FileData }
+    /**
+     * uri 形如  `com.package.XXX`
+     */
     uriDict: { [uri: string]: FileData }
+    /**
+     * name 形如 `XXX`
+     */
     nameDict: { [name: string]: FileData }
     interfaces: string[]
 }
@@ -193,10 +202,16 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
     const impDict = {} as { [name: string]: ImpRefs };
     for (let i = 0; i < imps.length; i++) {
         const imp = imps[i];
-        const idx = imp.lastIndexOf(".");
-        const pkg = imp.slice(0, idx);
-        const name = imp.slice(idx + 1);
-        impDict[name] = { name, fullName: imp, count: 0, pkg }
+        const data = uriDict[imp];
+        if (data) {
+            const idx = imp.lastIndexOf(".");
+            const name = imp.slice(idx + 1);
+            let cData = data?.inPackage?.clzs?.[name];
+            if (cData && !cData.isEnum()) {
+                const pkg = imp.slice(0, idx);
+                impDict[name] = { name, fullName: imp, count: 0, pkg }
+            }
+        }
     }
     const stars = impStars.concat(pkg, "");
     for (let i = 0; i < stars.length; i++) {
@@ -208,7 +223,10 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
                 const { clzs, ints } = dat.inPackage;
                 const pkg = dat.pkg;
                 for (let name in clzs) {
-                    impDict[name] = { pkg, name, fullName: getFullName(pkg, name), count: 0 };
+                    let cData = clzs[name];
+                    if (!cData.isEnum()) {
+                        impDict[name] = { pkg, name, fullName: getFullName(pkg, name), count: 0 };
+                    }
                 }
                 for (let name in ints) {
                     impDict[name] = { pkg, name, fullName: getFullName(pkg, name), count: 0 };
@@ -312,7 +330,7 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
         const { baseClass, dict, staticDict, others, constructors, name, setterDict, node, enumData, staVarWithFunCall } = classData;
 
         const lines = [] as string[];
-        if (Config.useConstEnumForLiteralClass && enumData) {
+        if (classData.isEnum()) {
             const cnt = {
                 name,
                 staticDict: {},
@@ -322,7 +340,7 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
                 baseDict: {},
                 impDict,
             }
-            lines.push(`export const enum ${name}{`);
+            lines.push(`declare const enum ${name}{`);
             let backlines = [] as string[];
             for (let name in enumData) {
                 const node = enumData[name];
@@ -482,9 +500,13 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
             for (let i = 0; i < impls.length; i++) {
                 const v = impls[i];
                 let d = impDict[v];
-                impLines.push(`"${d.fullName}"`)
+                if (d) {
+                    impLines.push(`"${d.fullName}"`)
+                }
             }
-            impStr = `, [\n${impLines.join(",\n")}\n]`;
+            if (impLines.length) {
+                impStr = `, [\n${impLines.join(",\n")}\n]`;
+            }
         }
 
         lines.push(`$H.clz(${name},"${getFullName(pkg, name)}"${impStr});`);
@@ -561,9 +583,13 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
             for (let i = 0; i < impls.length; i++) {
                 const v = impls[i];
                 let d = impDict[v];
-                implFullName.push(`"${d.fullName}",`)
+                if (d) {
+                    implFullName.push(`"${d.fullName}",`)
+                }
             }
-            baseImpStr = `, [${implFullName.join(",")}]`
+            if (implFullName.length) {
+                baseImpStr = `, [${implFullName.join(",")}]`
+            }
         }
 
         interfaces.push(`$H.ifc("${getFullName(pkg, name)}"${baseImpStr});`);
