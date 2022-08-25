@@ -1,0 +1,1 @@
+java -jar getAst.jar file:///D:/workspace/wallan2022/sjcq/game/ D:\workspace\wallan2022\AstTest\ast.txt
