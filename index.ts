@@ -3,6 +3,7 @@ import { solveAst } from "./SolveAST";
 import fs from "fs";
 import path from "path";
 import { formatContent } from "./FormatTsContent";
+import { Config } from "./Config";
 
 const inputBaseDir = "D:\\workspace\\wallan2022\\sjcq\\game";
 const outDir = "D:\\workspace\\wallan2022\\sjcq\\chuanqi";
@@ -34,6 +35,9 @@ readAstFile("ast.txt", dict => {
     solveAst(dict, (file, cnt) => {
         const p = path.join(outDir, file);
         mkdirs(path.dirname(p));
+        if (Config.addFileTrace) {
+            cnt = `console.log(${file})\n` + cnt;
+        }
         fs.writeFileSync(p, formatContent(cnt));
     }, inputBaseDir, file => file.indexOf("libs\\laya") == -1);
     const helperFile = "ClassHelper.ts";

@@ -11,4 +11,9 @@ export const Config = {
      * 将 var 改为 let
      */
     changeVarToLet: true,
+    /**
+     * 在文件前面增加  
+     * `console.log(file)`
+     */
+    addFileTrace: true,
 }
