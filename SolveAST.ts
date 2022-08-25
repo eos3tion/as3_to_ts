@@ -4,6 +4,7 @@ import { ClassData, getClassData, isScopeNode } from "./GetScopeData";
 import { appendTo, getChildIdx, solveIdentifierValue } from "./Helper";
 import { importFilter, importReplace } from "./LayaIFFlasth";
 import { Config } from "./Config";
+import { createOrderedImportFile } from "./createOrderedImportFile";
 const EmptyObj = Object.freeze({});
 type FileContext = {
     pkgDict: { [pkg: string]: FileData[] },
@@ -22,7 +23,7 @@ type FileContext = {
     interfaces: string[]
 }
 
-type FileData = ReturnType<typeof getFile>;
+export type FileData = ReturnType<typeof getFile>;
 
 interface PackageScope {
     clzs: { [name: string]: ClassData };
@@ -62,6 +63,7 @@ function getFile(file: string, node: AstNode, baseDir: string) {
         other: [] as AstNode[]
     } as PackageScope;
     let scope: AstNode;
+    let refed: string[];
     if (packageNode) {
         scope = packageNode.children[1];
         pkg = solveIdentifierValue(packageNode.value);
@@ -72,6 +74,14 @@ function getFile(file: string, node: AstNode, baseDir: string) {
                 //检查
                 const node = children[i];
                 checkChild(node, inPackage);
+            }
+            const clzs = inPackage.clzs;
+            for (let name in clzs) {
+                let cData = clzs[name];
+                if (!cData.isEnum()) {
+                    refed = [];
+                    break
+                }
             }
         }
     }
@@ -95,7 +105,11 @@ function getFile(file: string, node: AstNode, baseDir: string) {
         impStars,
         scope,
         inPackage,
-        outPackage
+        outPackage,
+        /**
+         * 被引用的
+         */
+        refed
     }
     function checkChild(node: AstNode, { clzs, ints, other }: PackageScope) {
         const nodeType = node.type;
@@ -167,9 +181,12 @@ export async function solveAst(dict: { [file: string]: AstNode }, callback: { (f
         interfaces
     }
 
+    let usedFile = [] as FileData[];
+
     for (const file in dict) {
         if (filter(file) && !importFilter(path.relative(baseDir, file))) {
             const dat = fileDict[file];
+            usedFile.push(dat);
             try {
                 await solveFileNode(dat, context).then(v => callback(path.relative(baseDir, file).replace(".as", ".ts"), v));
             } catch (e) {
@@ -180,6 +197,10 @@ export async function solveAst(dict: { [file: string]: AstNode }, callback: { (f
 
     if (interfaces.length) {
         callback("interfaces.ts", interfaces.join("\n"));
+    }
+
+    if (Config.createOrderedImportFile) {
+        createOrderedImportFile(usedFile, callback);
     }
 }
 
@@ -266,6 +287,10 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
             const fullName = impDat.fullName;
             const impFileDat = uriDict[fullName];
             if (impFileDat) {
+                let refed = impFileDat.refed;
+                if (refed) {
+                    refed.push(fileName);
+                }
                 let rela = path.relative(path.dirname(data.path), impFileDat.path).replaceAll("\\", "/");
                 if (!rela.startsWith(".")) {
                     rela = "./" + rela;
@@ -501,12 +526,12 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
 
         let impStr = "";
         if (impls && impls.length) {
-            const impLines = [] as string[]
+            const impLines = [] as string[];
             for (let i = 0; i < impls.length; i++) {
                 const v = impls[i];
                 let d = impDict[v];
                 if (d) {
-                    impLines.push(`"${d.fullName}"`)
+                    impLines.push(`"${d.fullName}"`);
                 }
             }
             if (impLines.length) {
