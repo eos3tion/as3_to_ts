@@ -35,9 +35,6 @@ readAstFile("ast.txt", dict => {
     solveAst(dict, (file, cnt) => {
         const p = path.join(outDir, file);
         mkdirs(path.dirname(p));
-        if (Config.addFileTrace) {
-            cnt = `console.log("${file.replaceAll("\\", "/")}")\n` + cnt;
-        }
         fs.writeFileSync(p, formatContent(cnt));
     }, inputBaseDir, file => file.indexOf("libs\\laya") == -1);
     const helperFile = "ClassHelper.ts";

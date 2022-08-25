@@ -12,8 +12,8 @@ export const Config = {
      */
     changeVarToLet: true,
     /**
-     * 在文件前面增加  
-     * `console.log(file)`
+     * 调整全static的类，方法改为`export function`  
+     * 如果剩下的都是可变成 enum 的，则自动按 enum 输出
      */
-    addFileTrace: true,
+    convertStaticClassToExportFunction: false,
 }
