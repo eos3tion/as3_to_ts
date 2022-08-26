@@ -22,5 +22,5 @@ export const Config = {
      * 优先输出引用少的文件，排除`Laya`库的代码  
      * 
      */
-    createOrderedImportFile: true,
+    createOrderedImportFile: false,
 }
