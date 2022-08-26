@@ -109,7 +109,8 @@ function getFile(file: string, node: AstNode, baseDir: string) {
         /**
          * 被引用的
          */
-        refed
+        refed,
+        imports: []
     }
     function checkChild(node: AstNode, { clzs, ints, other }: PackageScope) {
         const nodeType = node.type;
@@ -213,7 +214,7 @@ function getFullName(pkg: string, name: string) {
 
 
 async function solveFileNode(data: FileData, cnt: FileContext) {
-    const { imps, impStars, pkg, file, name: fileName, inPackage, outPackage } = data;
+    const { imps, impStars, pkg, file, name: fileName, inPackage, outPackage, imports } = data;
     const content = await fs.promises.readFile(file, "utf-8");
     const { pkgDict, uriDict, nameDict, interfaces } = cnt;
 
@@ -255,7 +256,7 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
                     }
                 }
                 for (let name in ints) {
-                    impDict[name] = { pkg, name, fullName: getFullName(pkg, name), count: 0 };
+                    impDict[name] = { pkg, name, fullName: getFullName(pkg, name), count: 0, isInterface: true };
                 }
             }
         } else {
@@ -290,6 +291,9 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
                 let refed = impFileDat.refed;
                 if (refed) {
                     refed.push(fileName);
+                }
+                if (fullName !== "Laya" && !fullName.startsWith("laya.") && !impDat.isInterface) {
+                    imports.push(fullName);
                 }
                 let rela = path.relative(path.dirname(data.path), impFileDat.path).replaceAll("\\", "/");
                 if (!rela.startsWith(".")) {
@@ -640,7 +644,11 @@ type ImpRefs = {
     /**
      * 引用计数
      */
-    count: number
+    count: number,
+    /**
+     * 是否为接口
+     */
+    isInterface?: boolean;
 };
 
 interface ClassContext {
