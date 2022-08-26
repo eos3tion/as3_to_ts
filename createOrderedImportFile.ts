@@ -15,9 +15,19 @@ export function createOrderedImportFile(files: FileData[], callback: { (file: st
     }
     //将剩下的files中
     if (files.length) {
+        let dict = {} as { [name: string]: FileData };
+        for (let i = 0; i < files.length; i++) {
+            const file = files[i];
+            dict[file.fullName] = file;
+        }
+        let fff = [] as ReturnType<typeof checkFile>[];
+        for (let i = 0; i < files.length; i++) {
+            const file = files[i];
+            fff.push(checkFile(file, dict));
+        }
         //剩下的文件，按引用数排序
         appendTo(
-            files.sort((b, a) => getOrder(a) - getOrder(b)),
+            fff.sort((b, a) => a.refs.length - b.refs.length),
             outfiles
         );
     }
@@ -56,4 +66,25 @@ function out(file: FileData) {
 
 function getOrder(file: FileData) {
     return 1E8 - file.imports.length * 1E5 + file.refed.length;
+}
+
+
+function checkFile(file: FileData, dict: { [fullname: string]: FileData }) {
+    let checked = {};
+    let unsolved = [file];
+    while (unsolved.length) {
+        let cur = unsolved.pop();
+        let imports = cur.imports;
+        for (let i = 0; i < imports.length; i++) {
+            const imp = imports[i];
+            let f = dict[imp];
+            if (f) {
+                if (!checked[imp]) {
+                    unsolved.push(f)
+                }
+            }
+        }
+        checked[cur.fullName] = true;
+    }
+    return { file: file, refs: Object.keys(checked) };
 }
