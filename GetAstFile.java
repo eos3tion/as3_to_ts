@@ -24,16 +24,30 @@ public class GetAstFile {
     private static final String AstOutputFile = "ast.txt";
 
     public static void main(String[] args) throws IOException {
+
         var configFactory = new ASConfigProjectConfigStrategyFactory();
-        System.setProperty(PROPERTY_FRAMEWORK_LIB, FlashSDKPath);
+        var projectFolderUri = ProjectPath;
+        if (args.length >= 1) {
+            projectFolderUri = args[0];
+        }
+        var outFile = AstOutputFile;
+        if (args.length >= 2) {
+            outFile = args[1];
+        }
+        var libPath = FlashSDKPath;
+        if (args.length >= 3) {
+            libPath = args[2];
+        }
+
+        System.setProperty(PROPERTY_FRAMEWORK_LIB, libPath);
         var actionScriptServices = new ActionScriptServices(configFactory);
         var folder = new WorkspaceFolder();
-        folder.setUri(ProjectPath);
+        folder.setUri(projectFolderUri);
         actionScriptServices.addWorkspaceFolder(folder);
         actionScriptServices.setInitialized();
         var projectData = actionScriptServices.getProjects().get(0);
         var project = projectData.project;
-        try (var writer = new PrintWriter(AstOutputFile, StandardCharsets.UTF_8)) {
+        try (var writer = new PrintWriter(outFile, StandardCharsets.UTF_8)) {
             for (var unit : project.getCompilationUnits()) {
                 if (unit == null) {
                     continue;
