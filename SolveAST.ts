@@ -1,10 +1,11 @@
 import fs from "fs";
 import path from "path";
 import { ClassData, getClassData, isScopeNode } from "./GetScopeData";
-import { appendTo, getChildIdx, solveIdentifierValue } from "./Helper";
+import { appendTo, getChildIdx, getNamespaceIdent, solveIdentifierValue } from "./Helper";
 import { importFilter, importReplace } from "./LayaIFFlasth";
 import { Config } from "./Config";
 import { createOrderedImportFile } from "./createOrderedImportFile";
+import { getInstanceofType, getTSType } from "./TSType";
 const EmptyObj = Object.freeze({});
 type FileContext = {
     pkgDict: { [pkg: string]: FileData[] },
@@ -114,17 +115,17 @@ function getFile(file: string, node: AstNode, baseDir: string) {
     }
     function checkChild(node: AstNode, { clzs, ints, other }: PackageScope) {
         const nodeType = node.type;
-        if (nodeType === NodeName.ImportNode) {
+        if (nodeType === NodeType.ImportNode) {
             const imp = solveIdentifierValue(node.value);
             if (imp.slice(-1) === "*") {
                 impStars.push(imp.slice(0, -2));
             } else {
                 imps.push(imp);
             }
-        } else if (nodeType === NodeName.ClassNode) {
+        } else if (nodeType === NodeType.ClassNode) {
             const cData = getClassData(node);
             clzs[cData.name] = cData;
-        } else if (nodeType === NodeName.InterfaceNode) {
+        } else if (nodeType === NodeType.InterfaceNode) {
             const name = solveIdentifierValue(node.value);
             ints[name] = node;
         } else {
@@ -376,7 +377,7 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
             for (let name in enumData) {
                 const node = enumData[name];
                 const type = node.type;
-                if (type === NodeName.NumericLiteralNode || type === NodeName.LiteralNode) {
+                if (type === NodeType.NumericLiteralNode || type === NodeType.LiteralNode) {
                     let v = getLiteralStr(node, cnt);
                     if (v === "true") {
                         v = "1";
@@ -404,11 +405,11 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
         }
         const nodeChildren = node.children;
 
-        let implIdx = getChildIdx(nodeChildren, 0, NodeName.KeywordNode, NodeID.KeywordImplementsID);
+        let implIdx = getChildIdx(nodeChildren, 0, NodeType.KeywordNode, NodeID.KeywordImplementsID);
         let impls: string[];
         if (implIdx > -1) {
             let contNode = nodeChildren[++implIdx];
-            if (contNode.type === NodeName.TransparentContainerNode) {
+            if (contNode.type === NodeType.TransparentContainerNode) {
                 impls = getImpls(contNode, impDict);
             }
         }
@@ -445,7 +446,7 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
         //先输出属性
         for (let key in staticDict) {
             const dat = staticDict[key];
-            if (dat.type === NodeName.VariableNode) {
+            if (dat.type === NodeType.VariableNode) {
                 if (Config.useHelperForStaticGetter && staVarWithFunCall[key]) {
                     const defNode = staVarWithFunCall[key];
                     lines.push(getVarStr(dat, clzCnt, true, true));
@@ -459,7 +460,7 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
 
         for (let key in staticDict) {
             const dat = staticDict[key];
-            if (dat.type === NodeName.GetterNode) {
+            if (dat.type === NodeType.GetterNode) {
                 lines.push(getGetterStr(dat, clzCnt));
                 lines.push("");
                 let setter = setterDict[key];
@@ -473,7 +474,7 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
 
         for (let key in dict) {
             const dat = dict[key];
-            if (dat.type === NodeName.VariableNode) {
+            if (dat.type === NodeType.VariableNode) {
                 lines.push(getVarStr(dat, clzCnt, true));
                 lines.push("");
             }
@@ -481,7 +482,7 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
 
         for (let key in dict) {
             const dat = dict[key];
-            if (dat.type === NodeName.GetterNode) {
+            if (dat.type === NodeType.GetterNode) {
                 lines.push(getGetterStr(dat, clzCnt));
                 lines.push("");
                 let setter = setterDict[key];
@@ -502,7 +503,7 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
         //最后附加函数
         for (let key in dict) {
             const dat = dict[key];
-            if (dat.type === NodeName.FunctionNode) {
+            if (dat.type === NodeType.FunctionNode) {
                 lines.push(getFunctionStr(dat, clzCnt, { noFunc: true }));
                 lines.push("");
             }
@@ -510,7 +511,7 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
         //最后附加函数
         for (let key in staticDict) {
             const dat = staticDict[key];
-            if (dat.type === NodeName.FunctionNode) {
+            if (dat.type === NodeType.FunctionNode) {
                 lines.push(getFunctionStr(dat, clzCnt, { noFunc: true }));
             }
         }
@@ -555,12 +556,12 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
         const lines = [] as string[];
         let name = solveIdentifierValue(node.value);
 
-        let extIdx = getChildIdx(children, 0, NodeName.KeywordNode, NodeID.KeywordExtendsID);
+        let extIdx = getChildIdx(children, 0, NodeType.KeywordNode, NodeID.KeywordExtendsID);
         let baseClassStr = "";
         let impls = [] as string[];
         if (extIdx > -1) {
             let contNode = children[++extIdx];
-            if (contNode.type === NodeName.TransparentContainerNode) {
+            if (contNode.type === NodeType.TransparentContainerNode) {
                 impls = getImpls(contNode, impDict);
                 baseClassStr = ` extends ${impls.join(",")} `;
             }
@@ -568,7 +569,7 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
             extIdx = 0;
         }
 
-        let scopeIdx = getChildIdx(children, extIdx, NodeName.ScopedBlockNode);
+        let scopeIdx = getChildIdx(children, extIdx, NodeType.ScopedBlockNode);
         let scope = children[scopeIdx];
         let expStr = "";
         if (exp) {
@@ -589,16 +590,16 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
             for (let i = 0; i < children.length; i++) {
                 const child = children[i];
                 switch (child.type) {
-                    case NodeName.FunctionNode:
+                    case NodeType.FunctionNode:
                         lines.push(getFunctionStr(child, cnt, { noFunc: true }));
                         break;
-                    case NodeName.SetterNode:
+                    case NodeType.SetterNode:
                         lines.push(getSetterStr(child, cnt));
                         break;
-                    case NodeName.GetterNode:
+                    case NodeType.GetterNode:
                         lines.push(getGetterStr(child, cnt));
                         break;
-                    case NodeName.VariableNode:
+                    case NodeType.VariableNode:
                         lines.push(getVarStr(child, cnt));
                         break;
                 }
@@ -658,23 +659,6 @@ interface ClassContext {
 
 
 
-const as2tsType = {
-    "Number": "number",
-    "int": "number",
-    "uint": "number",
-    "*": "any",
-    "Object": "any",
-    "String": "string",
-    "Boolean": "boolean",
-    "Array": "any[]",
-} as { [type: string]: string }
-function getTSType(type: string) {
-    if (type in as2tsType) {
-        return as2tsType[type];
-    }
-    return type;
-}
-
 interface GetParamNodeStringOpt {
     noDefault?: boolean
 }
@@ -722,15 +706,6 @@ function solveParam(paramNameNode: AstNode, paramTypeNode: AstNode, defaultNode:
     return `${solveIdentifierValue(paramNameNode.value)}${optStr}${typeStr}${defStr} `;
 }
 
-function getNamespaceIdent(node: AstNode) {
-    let v = solveIdentifierValue(node.value);
-    if (v === "public" || v === "internal") {
-        v = "";
-    } else {
-        v += " ";
-    }
-    return v;
-}
 
 function getStaticString(isStatic: boolean) {
     let v = "";
@@ -773,7 +748,7 @@ function checkImp(v: string, impDict: { [name: string]: ImpRefs }) {
 
 function checkScope(node: AstNode, clzCnt: ClassContext, noAddThis?: boolean) {
     let v = "";
-    if (node.type === NodeName.IdentifierNode) {
+    if (node.type === NodeType.IdentifierNode) {
         v = solveIdentifierValue(node.value);
         const { dict, staticDict, baseDict, impDict, baseStaticDict, name } = clzCnt;
         //检查node的parent
@@ -841,7 +816,7 @@ function getIfNodeStr(node: AstNode, clzCnt: ClassContext) {
     const children = node.children;
     for (let i = 0; i < children.length; i++) {
         const child = children[i];
-        if (child.type === NodeName.ConditionalNode) {//children只能是ConditionNode
+        if (child.type === NodeType.ConditionalNode) {//children只能是ConditionNode
             const subs = child.children;
             //只会有 0-2 个子节点
             //最多一个 conditionalNode 和一个 contentsNode
@@ -870,186 +845,186 @@ function getMemberAccessExpressionNodeStr(node: AstNode, clzCnt: ClassContext) {
 
 function getNodeStr(node: AstNode, clzCnt: ClassContext): string {
     switch (node.type) {
-        case NodeName.MemberAccessExpressionNode:
+        case NodeType.MemberAccessExpressionNode:
             return getMemberAccessExpressionNodeStr(node, clzCnt);
 
-        case NodeName.NilNode:
-        case NodeName.MetaTagsNode:
+        case NodeType.NilNode:
+        case NodeType.MetaTagsNode:
             return "";
-        case NodeName.TernaryOperatorNode:
+        case NodeType.TernaryOperatorNode:
             return getTernaryStr(node, clzCnt);
-        case NodeName.VariableNode:
+        case NodeType.VariableNode:
             return getVarStr(node, clzCnt);
-        case NodeName.VariableExpressionNode:
+        case NodeType.VariableExpressionNode:
             return getVarStr(node.children[0], clzCnt);
-        case NodeName.LiteralNode:
+        case NodeType.LiteralNode:
             return getLiteralStr(node, clzCnt);
-        case NodeName.NumericLiteralNode:
+        case NodeType.NumericLiteralNode:
             return `(${getLiteralStr(node, clzCnt)})`;
-        case NodeName.RegExpLiteralNode:
+        case NodeType.RegExpLiteralNode:
             return getRegExpStr(node, clzCnt);
-        case NodeName.FunctionCallNode:
+        case NodeType.FunctionCallNode:
             return getFuncCallStr(node, clzCnt);
-        case NodeName.ParameterNode:
+        case NodeType.ParameterNode:
             return getParamNodeString(node, clzCnt);
-        case NodeName.ObjectLiteralValuePairNode:
+        case NodeType.ObjectLiteralValuePairNode:
             return getObjKVStr(node, clzCnt);
-        case NodeName.LanguageIdentifierNode:
+        case NodeType.LanguageIdentifierNode:
             return solveIdentifierValue(node.value);
-        case NodeName.IdentifierNode://变量那些，最好不走这个，没法判断是否加`this`
+        case NodeType.IdentifierNode://变量那些，最好不走这个，没法判断是否加`this`
             return solveIdentifierValue(node.value);
-        case NodeName.TypedExpressionNode:
+        case NodeType.TypedExpressionNode:
             return getTypedExpressStr(node, clzCnt);
-        case NodeName.DynamicAccessNode:
+        case NodeType.DynamicAccessNode:
             return getDynamicAccessStr(node, clzCnt);
-        case NodeName.FunctionObjectNode:
+        case NodeType.FunctionObjectNode:
             return getFunctionStr(node.children[0], clzCnt);
-        case NodeName.FunctionNode:
+        case NodeType.FunctionNode:
             return getFunctionStr(node, clzCnt);
         //========== BinaryOperator ==================================
-        case NodeName.BinaryOperatorCommaNode:
+        case NodeType.BinaryOperatorCommaNode:
             return getLeftRightStr(node, clzCnt, ", ", true);
-        case NodeName.BinaryOperatorAsNode:
+        case NodeType.BinaryOperatorAsNode:
             return getAsStr(node, clzCnt);
-        case NodeName.BinaryOperatorInNode:
+        case NodeType.BinaryOperatorInNode:
             return getLeftRightStr(node, clzCnt, " in ");
-        case NodeName.BinaryOperatorInstanceOfNode:
-        case NodeName.BinaryOperatorIsNode:
+        case NodeType.BinaryOperatorInstanceOfNode:
+        case NodeType.BinaryOperatorIsNode:
             return getInstanceOfStr(node, clzCnt);
-        case NodeName.BinaryOperatorAssignmentNode:
+        case NodeType.BinaryOperatorAssignmentNode:
             return getLeftRightStr(node, clzCnt, " = ");
         //============ BinaryOperatorMath =================
-        case NodeName.BinaryOperatorPlusNode:
+        case NodeType.BinaryOperatorPlusNode:
             return getLeftRightStr(node, clzCnt, " + ");
-        case NodeName.BinaryOperatorPlusAssignmentNode:
+        case NodeType.BinaryOperatorPlusAssignmentNode:
             return getLeftRightStr(node, clzCnt, " += ");
-        case NodeName.BinaryOperatorMinusNode:
+        case NodeType.BinaryOperatorMinusNode:
             return getLeftRightStr(node, clzCnt, " - ");
-        case NodeName.BinaryOperatorMinusAssignmentNode:
+        case NodeType.BinaryOperatorMinusAssignmentNode:
             return getLeftRightStr(node, clzCnt, " -= ");
-        case NodeName.BinaryOperatorMultiplicationNode:
+        case NodeType.BinaryOperatorMultiplicationNode:
             return getLeftRightStr(node, clzCnt, " * ");
-        case NodeName.BinaryOperatorMultiplicationAssignmentNode:
+        case NodeType.BinaryOperatorMultiplicationAssignmentNode:
             return getLeftRightStr(node, clzCnt, " *= ");
-        case NodeName.BinaryOperatorDivisionNode:
+        case NodeType.BinaryOperatorDivisionNode:
             return getLeftRightStr(node, clzCnt, " / ");
-        case NodeName.BinaryOperatorDivisionAssignmentNode:
+        case NodeType.BinaryOperatorDivisionAssignmentNode:
             return getLeftRightStr(node, clzCnt, " /= ");
-        case NodeName.BinaryOperatorModuloNode:
+        case NodeType.BinaryOperatorModuloNode:
             return getLeftRightStr(node, clzCnt, " % ");
-        case NodeName.BinaryOperatorModuloAssignmentNode:
+        case NodeType.BinaryOperatorModuloAssignmentNode:
             return getLeftRightStr(node, clzCnt, " %= ");
         //============ BinaryOperatorBitwise =================
-        case NodeName.BinaryOperatorBitwiseAndNode:
+        case NodeType.BinaryOperatorBitwiseAndNode:
             return getLeftRightStr(node, clzCnt, " & ");
-        case NodeName.BinaryOperatorBitwiseAndAssignmentNode:
+        case NodeType.BinaryOperatorBitwiseAndAssignmentNode:
             return getLeftRightStr(node, clzCnt, " &= ");
-        case NodeName.BinaryOperatorBitwiseLeftShiftNode:
+        case NodeType.BinaryOperatorBitwiseLeftShiftNode:
             return getLeftRightStr(node, clzCnt, " << ");
-        case NodeName.BinaryOperatorBitwiseLeftShiftAssignmentNode:
+        case NodeType.BinaryOperatorBitwiseLeftShiftAssignmentNode:
             return getLeftRightStr(node, clzCnt, " <<= ");
-        case NodeName.BinaryOperatorBitwiseOrNode:
+        case NodeType.BinaryOperatorBitwiseOrNode:
             return getLeftRightStr(node, clzCnt, " | ");
-        case NodeName.BinaryOperatorBitwiseOrAssignmentNode:
+        case NodeType.BinaryOperatorBitwiseOrAssignmentNode:
             return getLeftRightStr(node, clzCnt, " |= ");
-        case NodeName.BinaryOperatorBitwiseRightShiftNode:
+        case NodeType.BinaryOperatorBitwiseRightShiftNode:
             return getLeftRightStr(node, clzCnt, " >> ");
-        case NodeName.BinaryOperatorBitwiseRightShiftAssignmentNode:
+        case NodeType.BinaryOperatorBitwiseRightShiftAssignmentNode:
             return getLeftRightStr(node, clzCnt, " >>= ");
-        case NodeName.BinaryOperatorBitwiseUnsignedRightShiftNode:
+        case NodeType.BinaryOperatorBitwiseUnsignedRightShiftNode:
             return getLeftRightStr(node, clzCnt, " >>> ");
-        case NodeName.BinaryOperatorBitwiseUnsignedRightShiftAssignmentNode:
+        case NodeType.BinaryOperatorBitwiseUnsignedRightShiftAssignmentNode:
             return getLeftRightStr(node, clzCnt, " >>>= ");
-        case NodeName.BinaryOperatorBitwiseXorNode:
+        case NodeType.BinaryOperatorBitwiseXorNode:
             return getLeftRightStr(node, clzCnt, " ^ ");
-        case NodeName.BinaryOperatorBitwiseXorAssignmentNode:
+        case NodeType.BinaryOperatorBitwiseXorAssignmentNode:
             return getLeftRightStr(node, clzCnt, " ^= ");
         //============ BinaryOperatorLogical =================
-        case NodeName.BinaryOperatorEqualNode:
+        case NodeType.BinaryOperatorEqualNode:
             return getLeftRightStr(node, clzCnt, " == ");
-        case NodeName.BinaryOperatorStrictEqualNode:
+        case NodeType.BinaryOperatorStrictEqualNode:
             return getLeftRightStr(node, clzCnt, " === ");
-        case NodeName.BinaryOperatorNotEqualNode:
+        case NodeType.BinaryOperatorNotEqualNode:
             return getLeftRightStr(node, clzCnt, " != ");
-        case NodeName.BinaryOperatorStrictNotEqualNode:
+        case NodeType.BinaryOperatorStrictNotEqualNode:
             return getLeftRightStr(node, clzCnt, " !== ");
-        case NodeName.BinaryOperatorGreaterThanNode:
+        case NodeType.BinaryOperatorGreaterThanNode:
             return getLeftRightStr(node, clzCnt, " > ");
-        case NodeName.BinaryOperatorGreaterThanEqualsNode:
+        case NodeType.BinaryOperatorGreaterThanEqualsNode:
             return getLeftRightStr(node, clzCnt, " >= ");
-        case NodeName.BinaryOperatorLessThanNode:
+        case NodeType.BinaryOperatorLessThanNode:
             return getLeftRightStr(node, clzCnt, " < ");
-        case NodeName.BinaryOperatorLessThanEqualsNode:
+        case NodeType.BinaryOperatorLessThanEqualsNode:
             return getLeftRightStr(node, clzCnt, " <= ");
-        case NodeName.BinaryOperatorLogicalAndNode:
+        case NodeType.BinaryOperatorLogicalAndNode:
             return getLeftRightStr(node, clzCnt, " && ");
-        case NodeName.BinaryOperatorLogicalAndAssignmentNode:
+        case NodeType.BinaryOperatorLogicalAndAssignmentNode:
             return getLeftRightStr(node, clzCnt, " &&= ");
-        case NodeName.BinaryOperatorLogicalOrNode:
+        case NodeType.BinaryOperatorLogicalOrNode:
             return getLeftRightStr(node, clzCnt, " || ");
-        case NodeName.BinaryOperatorLogicalOrAssignmentNode:
+        case NodeType.BinaryOperatorLogicalOrAssignmentNode:
             return getLeftRightStr(node, clzCnt, " ||= ");
         //================UnaryOperator=============
-        case NodeName.UnaryOperatorPreIncrementNode:
+        case NodeType.UnaryOperatorPreIncrementNode:
             return getUnaryLeftStr(node, clzCnt, "++");
-        case NodeName.UnaryOperatorPostIncrementNode:
+        case NodeType.UnaryOperatorPostIncrementNode:
             return getUnaryRightStr(node, clzCnt, "++");
-        case NodeName.UnaryOperatorPreDecrementNode:
+        case NodeType.UnaryOperatorPreDecrementNode:
             return getUnaryLeftStr(node, clzCnt, "--");
-        case NodeName.UnaryOperatorPostDecrementNode:
+        case NodeType.UnaryOperatorPostDecrementNode:
             return getUnaryRightStr(node, clzCnt, "--");
-        case NodeName.UnaryOperatorAtNode:
+        case NodeType.UnaryOperatorAtNode:
             throw Error(`不允许使用 @, [${node.root.file}]`);
-        case NodeName.UnaryOperatorLogicalNotNode:
+        case NodeType.UnaryOperatorLogicalNotNode:
             return getUnaryLeftStr(node, clzCnt, "!");
-        case NodeName.UnaryOperatorBitwiseNotNode:
+        case NodeType.UnaryOperatorBitwiseNotNode:
             return getUnaryLeftStr(node, clzCnt, "~");
-        case NodeName.UnaryOperatorPlusNode:
+        case NodeType.UnaryOperatorPlusNode:
             return getUnaryLeftStr(node, clzCnt, "+");
-        case NodeName.UnaryOperatorMinusNode:
+        case NodeType.UnaryOperatorMinusNode:
             return getUnaryLeftStr(node, clzCnt, "-");
-        case NodeName.UnaryOperatorVoidNode:
+        case NodeType.UnaryOperatorVoidNode:
             return getUnaryLeftStr(node, clzCnt, "void ");
-        case NodeName.UnaryOperatorDeleteNode:
+        case NodeType.UnaryOperatorDeleteNode:
             return getUnaryLeftStr(node, clzCnt, "delete ");
-        case NodeName.UnaryOperatorTypeOfNode:
+        case NodeType.UnaryOperatorTypeOfNode:
             return getUnaryLeftStr(node, clzCnt, "typeof ");
         //===================容器类==========================================
-        case NodeName.ArrayLiteralNode:
+        case NodeType.ArrayLiteralNode:
             return getArrStr(node, clzCnt);
-        case NodeName.ObjectLiteralNode:
+        case NodeType.ObjectLiteralNode:
             return getObjStr(node, clzCnt);
-        case NodeName.VectorLiteralNode:
+        case NodeType.VectorLiteralNode:
             return getVecStr(node, clzCnt);
-        case NodeName.ScopedBlockNode:
-        case NodeName.BlockNode:
+        case NodeType.ScopedBlockNode:
+        case NodeType.BlockNode:
             return getBlockStr(node, clzCnt);
-        case NodeName.ContainerNode:
+        case NodeType.ContainerNode:
             return getConStr(node, clzCnt);
         //========流程控制====================
-        case NodeName.ThrowNode:
+        case NodeType.ThrowNode:
             return getThrowStr(node, clzCnt);
-        case NodeName.TryNode:
+        case NodeType.TryNode:
             return getTryStr(node, clzCnt);
-        case NodeName.CatchNode:
+        case NodeType.CatchNode:
             return getCatchStr(node, clzCnt);
-        case NodeName.TerminalNode:
+        case NodeType.TerminalNode:
             return getTerminalStr(node, clzCnt);
-        case NodeName.IterationFlowNode:
+        case NodeType.IterationFlowNode:
             return getIterationFlowStr(node, clzCnt);
-        case NodeName.LabeledStatementNode:
+        case NodeType.LabeledStatementNode:
             return getLabelStr(node, clzCnt);
-        case NodeName.IfNode:
+        case NodeType.IfNode:
             return getIfNodeStr(node, clzCnt);
-        case NodeName.ReturnNode:
+        case NodeType.ReturnNode:
             return getReturnStr(node, clzCnt);
-        case NodeName.ForLoopNode:
+        case NodeType.ForLoopNode:
             return getForLoopStr(node, clzCnt);
-        case NodeName.WhileLoopNode:
+        case NodeType.WhileLoopNode:
             return getWhileLoopStr(node, clzCnt);
-        case NodeName.DoWhileLoopNode:
+        case NodeType.DoWhileLoopNode:
             return getDoWhileLoopStr(node, clzCnt);
-        case NodeName.SwitchNode:
+        case NodeType.SwitchNode:
             return getSwitchStr(node, clzCnt);
         default:
             console.log(`未处理的类型：[${node.type}]`)
@@ -1067,21 +1042,21 @@ function getVarStr(node: AstNode, clzCnt: ClassContext, isClass?: boolean, noDef
     for (let i = 0; i < children.length; i++) {
         const child = children[i];
         const type = child.type;
-        if (type === NodeName.NamespaceIdentifierNode) {
+        if (type === NodeType.NamespaceIdentifierNode) {
             ident = getNamespaceIdent(child);
-        } else if (type === NodeName.ModifiersContainerNode) {
+        } else if (type === NodeType.ModifiersContainerNode) {
             const sub = child.children[0];
             if (sub && sub.value === `"static"`) {
                 isStatic = true;
             }
-        } else if (type === NodeName.KeywordNode) {//关键字
+        } else if (type === NodeType.KeywordNode) {//关键字
             if (child.value === `"const"`) {
                 isConst = true;
             }
             if (!find) {
                 find = i + 1;
             }
-        } else if (type === NodeName.ChainedVariableNode) {
+        } else if (type === NodeType.ChainedVariableNode) {
             chains.push(child);
         }
     }
@@ -1097,7 +1072,7 @@ function getVarStr(node: AstNode, clzCnt: ClassContext, isClass?: boolean, noDef
     const nameNode = children[find];
     const typeNode = children[find + 1];
     let defaultNode = children[find + 2];
-    if (defaultNode && defaultNode.type === NodeName.ChainedVariableNode || noDefault) {
+    if (defaultNode && defaultNode.type === NodeType.ChainedVariableNode || noDefault) {
         defaultNode = undefined;
     }
     let v = solveParam(nameNode, typeNode, defaultNode, clzCnt);
@@ -1150,7 +1125,7 @@ function getForLoopStr(node: AstNode, clzCnt: ClassContext) {
         const conChildren = conditionNode.children;
         let conStr = "";
         const child0 = conChildren[0];
-        if (conChildren.length === 1 && child0.type === NodeName.BinaryOperatorInNode) {
+        if (conChildren.length === 1 && child0.type === NodeType.BinaryOperatorInNode) {
             conStr = sovleInLoop(child0, "in", clzCnt);
         } else {
             conStr = getConStr(conditionNode, clzCnt, ";");
@@ -1162,11 +1137,11 @@ function getForLoopStr(node: AstNode, clzCnt: ClassContext) {
         const [varExpNode, listNode] = nodeIn.children;
         let varStr = "";
         let nameNode: AstNode;
-        if (varExpNode.type === NodeName.VariableExpressionNode) {
+        if (varExpNode.type === NodeType.VariableExpressionNode) {
             const varChildren = varExpNode.children[0].children;
             const first = varChildren[0];
             nameNode = first;
-            if (first.type === NodeName.KeywordNode) {
+            if (first.type === NodeType.KeywordNode) {
                 varStr = "let "
                 nameNode = varChildren[1];
             }
@@ -1212,14 +1187,14 @@ function getFunctionStr(node: AstNode, clzCnt: ClassContext, opts?: GetFuncStrPa
     for (let i = 0; i < children.length; i++) {
         const child = children[i];
         const type = child.type;
-        if (type === NodeName.NamespaceIdentifierNode) {
+        if (type === NodeType.NamespaceIdentifierNode) {
             ident = getNamespaceIdent(child);
-        } else if (type === NodeName.ModifiersContainerNode) {
+        } else if (type === NodeType.ModifiersContainerNode) {
             //检查 children
             const subs = child.children;
             for (let i = 0; i < subs.length; i++) {
                 const sub = subs[i];
-                if (sub.type === NodeName.ModifierNode) {
+                if (sub.type === NodeType.ModifierNode) {
                     let v = sub.value;
                     if (v === `"static"`) {
                         isStatic = true;
@@ -1228,20 +1203,20 @@ function getFunctionStr(node: AstNode, clzCnt: ClassContext, opts?: GetFuncStrPa
                     }
                 }
             }
-        } else if (type === NodeName.IdentifierNode) {
+        } else if (type === NodeType.IdentifierNode) {
             if (!name) {
                 name = solveIdentifierValue(child.value);
             } else {
                 retNode = child;
             }
-        } else if (type === NodeName.ContainerNode) {//处理参数
+        } else if (type === NodeType.ContainerNode) {//处理参数
             let subs = child.children;
             for (let i = 0; i < subs.length; i++) {
                 params.push(getParamNodeString(subs[i], clzCnt, { noDefault: noBlock }));
             }
-        } else if (type === NodeName.ScopedBlockNode) {
+        } else if (type === NodeType.ScopedBlockNode) {
             block = child;
-        } else if (type === NodeName.LanguageIdentifierNode) {
+        } else if (type === NodeType.LanguageIdentifierNode) {
             retNode = child;
         }
     }
@@ -1298,22 +1273,22 @@ function getSetterStr(node: AstNode, clzCnt: ClassContext) {
     for (let i = 0; i < children.length; i++) {
         const child = children[i];
         const type = child.type;
-        if (type === NodeName.NamespaceIdentifierNode) {
+        if (type === NodeType.NamespaceIdentifierNode) {
             ident = getNamespaceIdent(child);
-        } else if (type === NodeName.ModifiersContainerNode) {
+        } else if (type === NodeType.ModifiersContainerNode) {
             const sub = child.children[0];
             if (sub && sub.value === `"static"`) {
                 isStatic = true;
             }
-        } else if (type === NodeName.IdentifierNode) {//关键字
+        } else if (type === NodeType.IdentifierNode) {//关键字
             if (!name) {
                 name = solveIdentifierValue(child.value);
             }
-        } else if (type === NodeName.ScopedBlockNode) {
+        } else if (type === NodeType.ScopedBlockNode) {
             block = child;
-        } else if (type === NodeName.ContainerNode) {
+        } else if (type === NodeType.ContainerNode) {
             let sub = child.children[0];
-            if (sub.type === NodeName.ParameterNode) {
+            if (sub.type === NodeType.ParameterNode) {
                 paramString = getParamNodeString(sub, clzCnt);
             }
         }
@@ -1337,22 +1312,22 @@ function getGetterStr(node: AstNode, clzCnt: ClassContext, isStaticInterface?: b
     for (let i = 0; i < children.length; i++) {
         const child = children[i];
         const type = child.type;
-        if (type === NodeName.NamespaceIdentifierNode) {
+        if (type === NodeType.NamespaceIdentifierNode) {
             ident = getNamespaceIdent(child);
-        } else if (type === NodeName.ModifiersContainerNode) {
+        } else if (type === NodeType.ModifiersContainerNode) {
             const sub = child.children[0];
             if (sub && sub.value === `"static"`) {
                 isStatic = true;
             }
-        } else if (type === NodeName.IdentifierNode) {//关键字
+        } else if (type === NodeType.IdentifierNode) {//关键字
             if (!name) {
                 name = solveIdentifierValue(child.value);
             } else {
                 retNode = child;
             }
-        } else if (type === NodeName.ScopedBlockNode) {
+        } else if (type === NodeType.ScopedBlockNode) {
             block = child;
-        } else if (type === NodeName.LanguageIdentifierNode) {
+        } else if (type === NodeType.LanguageIdentifierNode) {
             retNode = child;
         }
     }
@@ -1435,7 +1410,7 @@ function getVecStr(node: AstNode, clzCnt: ClassContext) {
 function getArrayType(node: AstNode, clzCnt: ClassContext) {
     let type = "any";
     if (node) {
-        if (node.type === NodeName.IdentifierNode) {
+        if (node.type === NodeType.IdentifierNode) {
             type = getTSType(solveIdentifierValue(node.value));
             checkImp(type, clzCnt.impDict);
         } else {
@@ -1483,7 +1458,7 @@ function getConStr(node: AstNode, clzCnt: ClassContext, spe = "") {
     let childs = [] as string[];
     for (let i = 0; i < children.length; i++) {
         const child = children[i];
-        if (child.type === NodeName.ContainerNode) {
+        if (child.type === NodeType.ContainerNode) {
             childs.push(getConStr(child, clzCnt, ","));
         } else {
             childs.push(checkScope(child, clzCnt));
@@ -1509,7 +1484,7 @@ function getFuncCallStr(node: AstNode, clzCnt: ClassContext) {
         let i = 0;
         let child = children[i];
         let isNew = false;
-        if (child.type === NodeName.KeywordNode) {// new
+        if (child.type === NodeType.KeywordNode) {// new
             v = "new ";
             isNew = true;
             i++;
@@ -1540,13 +1515,13 @@ function getFuncCallStr(node: AstNode, clzCnt: ClassContext) {
             let solved = false;
             if (isNew) {//as3 new Vector只有2个参数，第一个是长度，第二个为是否是固定长度的参数
                 const nameNodeType = nameNode.type;
-                if (nameNodeType === NodeName.TypedExpressionNode) {
+                if (nameNodeType === NodeType.TypedExpressionNode) {
                     if (conChildren.length > 1) {
                         const lenNode = conChildren[0];
                         v += `(${checkScope(lenNode, clzCnt)})`
                         solved = true;
                     }
-                } else if (nameNodeType === NodeName.VectorLiteralNode) {
+                } else if (nameNodeType === NodeType.VectorLiteralNode) {
                     v += getConStr(conNode, clzCnt, ",");
                     solved = true;
                 }
@@ -1566,7 +1541,7 @@ function getTryStr(node: AstNode, clzCnt: ClassContext) {
     for (let i = 0; i < children.length; i++) {
         const child = children[i];
         v += getNodeStr(child, clzCnt);
-        if (child.type === NodeName.CatchNode) {
+        if (child.type === NodeType.CatchNode) {
             hasCatch = true;
         }
     }
@@ -1653,7 +1628,7 @@ function getSwitchStr(node: AstNode, clzCnt: ClassContext) {
         const caseNode = cases[i];
         const caseChildren = caseNode.children;
         let cnt: AstNode;
-        if (caseNode.type !== NodeName.TerminalNode) {
+        if (caseNode.type !== NodeType.TerminalNode) {
             v += `\tcase ${checkScope(caseChildren[0], clzCnt)}: \n`;
             cnt = caseChildren[1];
         } else {
@@ -1666,23 +1641,16 @@ function getSwitchStr(node: AstNode, clzCnt: ClassContext) {
     return v;
 }
 
-const typeofValue = {
-    "Number": "number",
-    "int": "number",
-    "uint": "number",
-    "Object": "object",
-    "String": "string",
-    "Boolean": "boolean",
-} as { [key: string]: string }
+
 function getInstanceOfStr(node: AstNode, clzCnt: ClassContext) {
     const children = node.children;
     const [leftNode, rightNode] = children;
     let v = "";
     let flag = true;
-    if (rightNode.type === NodeName.IdentifierNode) {
+    if (rightNode.type === NodeType.IdentifierNode) {
         //检查是否为基本类型
         let name = solveIdentifierValue(rightNode.value);
-        let t = typeofValue[name]
+        let t = getInstanceofType(name);
         if (t) {
             v = `typeof ${checkScope(leftNode, clzCnt)} === "${t}"`;
             flag = false;

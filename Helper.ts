@@ -5,12 +5,27 @@ export function solveIdentifierValue(msg: string | string[]) {
     return msg.slice(1, -1).replaceAll("\n", "\\n");
 }
 
-export function getChildIdx(children: AstNode[], start: number, type: NodeName, id?: NodeID) {
-    let i = start;
-    for (; i < children.length; i++) {
-        const child = children[i];
+export function getNamespaceIdent(node: AstNode) {
+    let v = "";
+    if (node) {//as3如果没有Namespace,默认private
+        v = solveIdentifierValue(node.value);
+        if (v === "public" || v === "internal") {
+            v = "";
+        } else {
+            v += " ";
+        }
+    }
+    return v;
+}
+export function getChildIdx(children: AstNode[], start: number, type: NodeType, id?: NodeID) {
+
+    if (start === -1) {
+        start = 0;
+    }
+    for (; start < children.length; start++) {
+        const child = children[start];
         if (child.type === type && (id === undefined || child.id === id)) {
-            return i;
+            return start;
         }
     }
     return -1;
@@ -31,7 +46,7 @@ export function walkChildren<T>(node: AstNode, checker: { (node: AstNode): T }) 
     }
 }
 
-export function getParent(node: AstNode, type: NodeName, maxLevel = Infinity, id?: NodeID) {
+export function getParent(node: AstNode, type: NodeType, maxLevel = Infinity, id?: NodeID) {
     let parent = node.parent;
     let level = 1;
     while (level <= maxLevel && parent) {
@@ -43,7 +58,7 @@ export function getParent(node: AstNode, type: NodeName, maxLevel = Infinity, id
     }
 }
 
-export function checkParents(node: AstNode, ...types: NodeName[]) {
+export function checkParents(node: AstNode, ...types: NodeType[]) {
     let parent = node.parent;
     let i = 0;
     do {

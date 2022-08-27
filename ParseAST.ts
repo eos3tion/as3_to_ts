@@ -26,7 +26,7 @@ export function readAstFile(file: string, callback: { (dict: { [file: string]: A
                 lastLine += line + "\n";
                 return
             }
-            if (line.startsWith(NodeName.NilNode)) {
+            if (line.startsWith(NodeType.NilNode)) {
                 return;
             }
         }
@@ -191,7 +191,7 @@ export function readAstFile(file: string, callback: { (dict: { [file: string]: A
     }
 }
 function setRootNode(node: AstNode, file: string, dict: { [file: string]: AstNode }) {
-    if (node.level === 0 && node.type === NodeName.FileNode) {
+    if (node.level === 0 && node.type === NodeType.FileNode) {
         node.file = file;
         node.root = node;
         dict[file] = node;

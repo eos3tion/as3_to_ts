@@ -13,7 +13,7 @@ export type ClassData = ReturnType<typeof getClassData>;
 export function getClassData(node: AstNode) {
     const children = node.children;
     let name = solveIdentifierValue(node.value);
-    let extIdx = getChildIdx(children, 0, NodeName.KeywordNode, NodeID.KeywordExtendsID);
+    let extIdx = getChildIdx(children, 0, NodeType.KeywordNode, NodeID.KeywordExtendsID);
     let baseClass = "";
     if (extIdx > -1) {
         baseClass = solveIdentifierValue(children[++extIdx].value);
@@ -38,7 +38,7 @@ export function getClassData(node: AstNode) {
         staticOnly: false
     }
 
-    let scopeIdx = getChildIdx(children, extIdx, NodeName.ScopedBlockNode);
+    let scopeIdx = getChildIdx(children, extIdx, NodeType.ScopedBlockNode);
     let scope = children[scopeIdx];
     if (scope) {
         solveClassScope(scope, classData);
@@ -62,14 +62,14 @@ export function getClassData(node: AstNode) {
             let name: string;
             let isStatic = false;
             switch (type) {
-                case NodeName.FunctionNode:
-                case NodeName.GetterNode:
-                case NodeName.SetterNode:
+                case NodeType.FunctionNode:
+                case NodeType.GetterNode:
+                case NodeType.SetterNode:
                     name = getFunctionName(child);
                     isStatic = getIsStatic(child);
                     checkFunctionScope(child);
                     break;
-                case NodeName.VariableNode:
+                case NodeType.VariableNode:
                     name = getVariableName(child);
                     isStatic = getIsStatic(child);
                     break;
@@ -80,7 +80,7 @@ export function getClassData(node: AstNode) {
                 if (!isStatic && className === name) {
                     //检查 child 有没有任何代码
                     const children = child.children;
-                    let idx = getChildIdx(children, 0, NodeName.ScopedBlockNode);
+                    let idx = getChildIdx(children, 0, NodeType.ScopedBlockNode);
                     if (idx > 0) {
                         let block = children[idx];
                         if (block.children.length > 0) {
@@ -95,7 +95,7 @@ export function getClassData(node: AstNode) {
                         dict[name] = child;
                         staticOnly = false;
                     }
-                    if (type === NodeName.SetterNode) {
+                    if (type === NodeType.SetterNode) {
                         setterDict[name] = child;
                     }
                 }
@@ -111,12 +111,12 @@ export function getClassData(node: AstNode) {
         //检查是否都有默认值，并且值只有字符串和数值类型
         for (let name in staticDict) {
             const child = staticDict[name];
-            if (child.type !== NodeName.VariableNode) {
+            if (child.type !== NodeType.VariableNode) {
                 enumable = false;
                 continue
             }
             const children = child.children;
-            const keyNodeIdx = getChildIdx(children, 0, NodeName.KeywordNode);
+            const keyNodeIdx = getChildIdx(children, 0, NodeType.KeywordNode);
             if (keyNodeIdx > -1) {
                 const defNode = children[keyNodeIdx + 3];
                 let keyNode = children[keyNodeIdx];
@@ -127,9 +127,9 @@ export function getClassData(node: AstNode) {
                     //defNode中，不能有funCall
                     const result = walkChildren(defNode, tester => {
                         const ttype = tester.type;
-                        if (ttype === NodeName.FunctionCallNode || ttype === NodeName.ObjectLiteralNode || ttype === NodeName.ArrayLiteralNode || ttype === NodeName.VectorLiteralNode) {
+                        if (ttype === NodeType.FunctionCallNode || ttype === NodeType.ObjectLiteralNode || ttype === NodeType.ArrayLiteralNode || ttype === NodeType.VectorLiteralNode) {
                             return true;
-                        } else if (ttype === NodeName.MemberAccessExpressionNode) {
+                        } else if (ttype === NodeType.MemberAccessExpressionNode) {
                             //检查主体是不是本身
                             const [left] = tester.children;
                             let val = solveIdentifierValue(left.value);
@@ -162,12 +162,12 @@ export function getClassData(node: AstNode) {
         let isStatic = false;
         for (let i = 0; i < children.length; i++) {
             const child = children[i];
-            if (child.type === NodeName.ModifiersContainerNode) {
+            if (child.type === NodeType.ModifiersContainerNode) {
                 //检查 children
                 const subs = child.children;
                 for (let i = 0; i < subs.length; i++) {
                     const sub = subs[i];
-                    if (sub.type === NodeName.ModifierNode) {
+                    if (sub.type === NodeType.ModifierNode) {
                         let v = sub.value;
                         if (v === `"static"`) {
                             isStatic = true;
@@ -185,7 +185,7 @@ function getVariableName(node: AstNode) {
     const children = node.children;
     for (let i = 0; i < children.length; i++) {
         const child = children[i];
-        if (child.type === NodeName.KeywordNode) {//关键字
+        if (child.type === NodeType.KeywordNode) {//关键字
             const nameNode = children[i + 1];
             return solveIdentifierValue(nameNode.value);
         }
@@ -196,7 +196,7 @@ function getFunctionName(node: AstNode) {
     const children = node.children;
     for (let i = 0; i < children.length; i++) {
         const child = children[i];
-        if (child.type === NodeName.IdentifierNode) {
+        if (child.type === NodeType.IdentifierNode) {
             return solveIdentifierValue(child.value);
         }
     }
@@ -228,11 +228,11 @@ export function checkFunctionScope(node: AstNode) {
         const child = children[i];
         let name: string;
         switch (child.type) {
-            case NodeName.FunctionNode:
+            case NodeType.FunctionNode:
                 name = getFunctionName(child);
                 checkFunctionScope(child);
                 break;
-            case NodeName.VariableNode:
+            case NodeType.VariableNode:
                 name = getVariableName(child);
                 break;
         }
@@ -245,18 +245,18 @@ export function checkFunctionScope(node: AstNode) {
 
 function getFunctionScope(child: AstNode) {
     const funChildren = child.children;
-    let scopeIdx = getChildIdx(funChildren, 0, NodeName.ScopedBlockNode);
+    let scopeIdx = getChildIdx(funChildren, 0, NodeType.ScopedBlockNode);
     let scope = funChildren[scopeIdx];
     return scope as FunctionScopeNode;
 }
 
 function getParamNodes(child: AstNode) {
     const funChildren = child.children;
-    let conIdx = getChildIdx(funChildren, 0, NodeName.ContainerNode);
+    let conIdx = getChildIdx(funChildren, 0, NodeType.ContainerNode);
     const conNode = funChildren[conIdx];
     return conNode?.children;
 }
 
 export function isScopeNode(node: AstNode): node is FunctionScopeNode {
-    return node.type === NodeName.ScopedBlockNode && (node as FunctionScopeNode).dict != undefined;
+    return node.type === NodeType.ScopedBlockNode && (node as FunctionScopeNode).dict != undefined;
 }

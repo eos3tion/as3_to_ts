@@ -60,7 +60,7 @@ interface RegExpLiteralNode extends AstNode {
     literal?: string;
 }
 
-const enum NodeName {
+const enum NodeType {
     FileNode = "FileNode",
     PackageNode = "PackageNode",
     ImportNode = "ImportNode",
@@ -575,61 +575,68 @@ const enum NodeName {
 const enum NodeID {
     LiteralStringID = "LiteralStringID",
     /**
-     * @see NodeName.TerminalNode  
+     * @see NodeType.TerminalNode  
      * finally
      */
     FinallyID = "FinallyID",
     /**
-     * @see NodeName.TerminalNode  
+     * @see NodeType.TerminalNode  
      * else
      */
     ElseID = "ElseID",
     /**
-     * @see NodeName.TerminalNode
+     * @see NodeType.TerminalNode
      * default
      */
     DefaultID = "DefaultID",
 
     /**
-     * @see NodeName.IterationFlowNode  
+     * @see NodeType.IterationFlowNode  
      * break
      */
     BreakID = "BreakID",
     /**
-     * @see NodeName.IterationFlowNode  
+     * @see NodeType.IterationFlowNode  
      * continue
      */
     ContinueID = "ContinueID",
     /**
-     * @see NodeName.IterationFlowNode  
+     * @see NodeType.IterationFlowNode  
      * goto  
      * js没对应语法  
      * 一般as3项目也用不到  
      */
     GotoID = "GotoID",
-
     /**
-     * @see NodeName.KeywordNode
+     * static
+     */
+    StaticID = "StaticID",
+    /**
+     * override
+     */
+    OverrideID = "OverrideID",
+    /**
+     * @see NodeType.KeywordNode
      * extends
      */
     KeywordExtendsID = "KeywordExtendsID",
     /**
-     * @see NodeName.KeywordNode
+     * @see NodeType.KeywordNode
      * implements
      */
     KeywordImplementsID = "KeywordImplementsID",
     /**
-     * @see NodeName.KeywordNode
+     * @see NodeType.KeywordNode
      * class
      */
     KeywordClassID = "KeywordClassID",
     /**
-     * @see NodeName.KeywordNode  
+     * @see NodeType.KeywordNode  
      * const
      */
     KeywordConstID = "KeywordConstID",
     /**
-     * @see NodeName.ForLoopNode
+     * @see NodeType.ForLoopNode
      * ```as3
      * for (var i:int = 0; i < arr.length; i++) {}
      * for(var key:String in filesListObj){}
@@ -637,7 +644,7 @@ const enum NodeID {
      */
     ForLoopID = "ForLoopID",
     /**
-     * @see NodeName.ForLoopNode
+     * @see NodeType.ForLoopNode
      * ```as3
      * for each(var v:Sprite in _panList){}
      * ```

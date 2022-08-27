@@ -11,9 +11,9 @@ export function needCheck(type: string) {
     return type in checkers;
 }
 
-const checkers = {} as { [type in NodeName]: { (node: AstNode, content: string) } }
+const checkers = {} as { [type in NodeType]: { (node: AstNode, content: string) } }
 
-checkers[NodeName.ParameterNode] = function (node: ParamNode, content: string) {
+checkers[NodeType.ParameterNode] = function (node: ParamNode, content: string) {
     const nameNode = node.children[0];
     if (node.start !== nameNode.start) {
         let p = content.substring(node.start, nameNode.start).trim();
@@ -23,6 +23,6 @@ checkers[NodeName.ParameterNode] = function (node: ParamNode, content: string) {
     }
 }
 
-checkers[NodeName.RegExpLiteralNode] = function (node: RegExpLiteralNode, content: string) {
+checkers[NodeType.RegExpLiteralNode] = function (node: RegExpLiteralNode, content: string) {
     node.literal = content.slice(node.start, node.end)
 }
