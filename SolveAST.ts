@@ -215,7 +215,6 @@ function getFullName(pkg: string, name: string) {
 
 async function solveFileNode(data: FileData, cnt: FileContext) {
     const { imps, impStars, pkg, file, name: fileName, inPackage, outPackage, imports } = data;
-    const content = await fs.promises.readFile(file, "utf-8");
     const { pkgDict, uriDict, nameDict, interfaces } = cnt;
 
     const baseClasses = {} as { [name: string]: true };
@@ -270,7 +269,6 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
         name: "",
         staticDict: {},
         baseStaticDict: {},
-        content,
         dict: {},
         baseDict: {},
         impDict
@@ -369,7 +367,6 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
                 name,
                 staticDict: {},
                 baseStaticDict: {},
-                content,
                 dict: {},
                 baseDict: {},
                 impDict,
@@ -433,7 +430,6 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
         const clzCnt = {
             name,
             lines,
-            content,
             dict,
             staticDict,
             baseDict,
@@ -583,7 +579,6 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
             name,
             staticDict: {},
             baseStaticDict: {},
-            content,
             dict: {},
             baseDict: {},
             impDict,
@@ -658,7 +653,6 @@ interface ClassContext {
     baseStaticDict: { [name: string]: true };
     baseDict: { [name: string]: true };
     impDict: { [name: string]: ImpRefs }
-    content: string;
     isInterface?: boolean;
 }
 
@@ -685,16 +679,13 @@ interface GetParamNodeStringOpt {
     noDefault?: boolean
 }
 
-function getParamNodeString(node: AstNode, clzCnt: ClassContext, opt?: GetParamNodeStringOpt) {
+function getParamNodeString(node: ParamNode, clzCnt: ClassContext, opt?: GetParamNodeStringOpt) {
     const children = node.children;
     const { noDefault } = opt || EmptyObj as GetParamNodeStringOpt;
     let [paramNameNode, paramTypeNode, defaultNode] = children;
     let v = "";
-    if (node.start !== paramNameNode.start) {//检查是否是 `...`
-        let p = clzCnt.content.substring(node.start, paramNameNode.start).trim();
-        if (p === "...") {
-            v = "...";
-        }
+    if (node.hasRest) {//检查是否是 `...`
+        v = "...";
     }
     v += solveParam(paramNameNode, paramTypeNode, defaultNode, clzCnt, { addOpt: true, noDefault });
     return v;
@@ -765,11 +756,9 @@ function getLiteralStr(node: AstNode, clzCnt: ClassContext) {
     }
 }
 
-function getRegExpStr(node: AstNode, clzCnt: ClassContext) {
+function getRegExpStr(node: RegExpLiteralNode, clzCnt: ClassContext) {
     //输出的ast文本，会丢失  "g" "i" "m" 等正则标记，AS3正则表达式只有命名分组和js命名分组不一致，所以先直接输出
-    let v = clzCnt.content.slice(node.start, node.end);
-    //TODO 将as3的命名分组写法转化为js的命名分组写法
-    return v;
+    return node.literal;
 }
 
 function checkImp(v: string, impDict: { [name: string]: ImpRefs }) {

@@ -49,6 +49,17 @@ interface FunctionScopeNode extends AstNode {
     dict: ClassDict;
 }
 
+interface ParamNode extends AstNode {
+    /**
+     * 是否需要加...
+     */
+    hasRest?: boolean;
+}
+
+interface RegExpLiteralNode extends AstNode {
+    literal?: string;
+}
+
 const enum NodeName {
     FileNode = "FileNode",
     PackageNode = "PackageNode",

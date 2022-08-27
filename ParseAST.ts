@@ -1,5 +1,6 @@
 import readline from "readline";
 import fs from "fs";
+import { checkNode, needCheck } from "./ParseASTNodeChecker";
 
 
 export function readAstFile(file: string, callback: { (dict: { [file: string]: AstNode }): any }) {
@@ -7,15 +8,18 @@ export function readAstFile(file: string, callback: { (dict: { [file: string]: A
     const rl = readline.createInterface({ input: stream, crlfDelay: Infinity });
     const dict = {} as { [file: string]: AstNode };
 
-    let curNode: AstNode | undefined;
+    let lastNode: AstNode | undefined;
     const ident = "  ";
     let lineNum = 0;
     let lastLine = "";
+    /**
+     * 是否有特殊节点
+     */
+    const specialNodes = [] as AstNode[];
     rl.on("line", line => {
         lineNum++;
         if (line === "") {//跳过空行
-            curNode = undefined;
-            return
+            return fileNodeEnd();
         }
         if (line.slice(-3) !== ".as") {
             if (line.slice(-1) !== "?") {
@@ -108,6 +112,7 @@ export function readAstFile(file: string, callback: { (dict: { [file: string]: A
         start = +startStr;
         end = +endStr;
 
+
         const node = {
             level,
             type,
@@ -117,18 +122,24 @@ export function readAstFile(file: string, callback: { (dict: { [file: string]: A
             value,
             children: [] as AstNode[]
         } as AstNode;
+
+        if (needCheck(type)) {
+            specialNodes.push(node);
+        }
+
         let hasErr = false;
-        if (curNode) {
-            let curLevel = curNode.level;
+        let isRoot = false;
+        if (lastNode) {
+            let curLevel = lastNode.level;
             if (level > curLevel) {
                 if (level === curLevel + 1) {//子集
-                    addChild(curNode, node);
+                    addChild(lastNode, node);
                 } else {
                     hasErr = true;
                 }
             } else {
                 let deltaLevel = curLevel - level;
-                let parent = curNode.parent;
+                let parent = lastNode.parent;
                 if (parent) {
                     while (deltaLevel > 0) {
                         parent = parent.parent;
@@ -143,13 +154,13 @@ export function readAstFile(file: string, callback: { (dict: { [file: string]: A
                         hasErr = true;
                     }
                 } else {
-                    let nod = setRootNode(node, file, dict);
-                    if (!nod) {
-                        hasErr = true;
-                    }
+                    isRoot = true;
                 }
             }
         } else {
+            isRoot = true;
+        }
+        if (isRoot) {
             let nod = setRootNode(node, file, dict);
             if (!nod) {
                 hasErr = true;
@@ -158,11 +169,26 @@ export function readAstFile(file: string, callback: { (dict: { [file: string]: A
         if (hasErr) {
             console.error(`${lineNum}行有误，请检查`);
         }
-        curNode = node;
+        lastNode = node;
     })
     rl.on("close", function () {
+        fileNodeEnd();
         callback(dict);
     })
+
+    function fileNodeEnd() {
+        if (lastNode) {
+            if (specialNodes.length) {
+                const content = fs.readFileSync(lastNode.root.file, "utf-8");
+                for (let i = 0; i < specialNodes.length; i++) {
+                    const node = specialNodes[i];
+                    checkNode(node, content);
+                }
+            }
+            specialNodes.length = 0;
+            lastNode = undefined;
+        }
+    }
 }
 function setRootNode(node: AstNode, file: string, dict: { [file: string]: AstNode }) {
     if (node.level === 0 && node.type === NodeName.FileNode) {
