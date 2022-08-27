@@ -34,7 +34,8 @@ export function getClassData(node: AstNode) {
         node,
         enumData: undefined as { [name: string]: AstNode },
         staVarWithFunCall: {} as { [name: string]: AstNode },
-        isEnum
+        isEnum,
+        staticOnly: false
     }
 
     let scopeIdx = getChildIdx(children, extIdx, NodeName.ScopedBlockNode);
@@ -110,6 +111,10 @@ export function getClassData(node: AstNode) {
             const keyNodeIdx = getChildIdx(children, 0, NodeName.KeywordNode);
             if (keyNodeIdx > -1) {
                 const defNode = children[keyNodeIdx + 3];
+                let keyNode = children[keyNodeIdx];
+                if (keyNode.id !== NodeID.KeywordConstID) {
+                    enumable = false;
+                }
                 if (defNode) {
                     //defNode中，不能有funCall
                     const result = walkChildren(defNode, tester => {
@@ -141,7 +146,7 @@ export function getClassData(node: AstNode) {
         if (enumable && hasEnum) {
             classData.enumData = enumData;
         }
-
+        classData.staticOnly = staticOnly;
     }
 
     function getIsStatic(node: AstNode) {

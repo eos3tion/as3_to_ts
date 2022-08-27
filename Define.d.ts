@@ -613,6 +613,11 @@ const enum NodeID {
      */
     KeywordClassID = "KeywordClassID",
     /**
+     * @see NodeName.KeywordNode  
+     * const
+     */
+    KeywordConstID = "KeywordConstID",
+    /**
      * @see NodeName.ForLoopNode
      * ```as3
      * for (var i:int = 0; i < arr.length; i++) {}
