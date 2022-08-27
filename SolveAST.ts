@@ -453,7 +453,7 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
                 if (Config.useHelperForStaticGetter && staVarWithFunCall[key]) {
                     const defNode = staVarWithFunCall[key];
                     lines.push(getVarStr(dat, clzCnt, true, true));
-                    statFun.push(`"${key}", function(){ return ${getNodeStr(defNode, clzCnt)} },`)
+                    statFun.push(`"${key}", function(this:${name}){ return ${getNodeStr(defNode, clzCnt)} },`)
                 } else {
                     lines.push(getVarStr(dat, clzCnt, true));
                     lines.push("");
@@ -732,13 +732,13 @@ function solveParam(paramNameNode: AstNode, paramTypeNode: AstNode, defaultNode:
 }
 
 function getNamespaceIdent(node: AstNode) {
-    // let v = solveIdentifierValue(node.value);
-    // if (v === "public" || v === "internal") {
-    //     v = "";
-    // } else {
-    //     v += " ";
-    // }
-    return "";
+    let v = solveIdentifierValue(node.value);
+    if (v === "public" || v === "internal") {
+        v = "";
+    } else {
+        v += " ";
+    }
+    return v;
 }
 
 function getStaticString(isStatic: boolean) {
