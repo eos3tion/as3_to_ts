@@ -78,8 +78,16 @@ export function getClassData(node: AstNode) {
             }
             if (name) {
                 if (!isStatic && className === name) {
-                    constructors.push(child);
-                    staticOnly = false;
+                    //检查 child 有没有任何代码
+                    const children = child.children;
+                    let idx = getChildIdx(children, 0, NodeName.ScopedBlockNode);
+                    if (idx > 0) {
+                        let block = children[idx];
+                        if (block.children.length > 0) {
+                            constructors.push(child);
+                            staticOnly = false;
+                        }
+                    }
                 } else {
                     if (isStatic) {
                         staticDict[name] = child;
