@@ -89,7 +89,7 @@ export function getClassData(node: AstNode, isLaya?: boolean) {
                     }
                 } else {
                     if (isStatic) {
-                        if (type === NodeType.FunctionNode) {
+                        if (type === NodeType.FunctionNode && !isLaya) {
                             staticFuns[name] = child;
                         }
                         staticDict[name] = child;
