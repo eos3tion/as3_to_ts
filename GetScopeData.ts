@@ -117,12 +117,13 @@ export function getClassData(node: AstNode, isLaya?: boolean) {
             if (keyNodeIdx > -1) {
                 const defNode = children[keyNodeIdx + 3];
                 let keyNode = children[keyNodeIdx];
+                let checkEnum = true;
                 if (keyNode.id !== NodeID.KeywordConstID) {
-                    continue
+                    checkEnum = false;
                 }
                 if (defNode) {
                     //defNode中，不能有funCall
-                    const result = walkChildren(defNode, tester => {
+                    const result = !checkEnum || walkChildren(defNode, tester => {
                         const ttype = tester.type;
                         if (ttype === NodeType.FunctionCallNode || ttype === NodeType.ObjectLiteralNode || ttype === NodeType.ArrayLiteralNode || ttype === NodeType.VectorLiteralNode) {
                             return true;
@@ -138,7 +139,6 @@ export function getClassData(node: AstNode, isLaya?: boolean) {
 
                     if (result) {
                         staVarWithFunCall[name] = defNode;
-                        continue
                     } else {
                         hasEnum = true;
                         enumData[name] = defNode;
