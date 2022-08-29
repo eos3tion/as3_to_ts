@@ -1496,7 +1496,8 @@ function getConStr(node: AstNode, clzCnt: ClassContext, spe = "") {
         if (child.type === NodeType.ContainerNode) {
             childs.push(getConStr(child, clzCnt, ","));
         } else {
-            childs.push(checkScope(child, clzCnt));
+            let v = checkScope(child, clzCnt) || "undefined";
+            childs.push(v);
         }
     }
     let pre = "";
