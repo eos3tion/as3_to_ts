@@ -453,7 +453,7 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
             if (dat.type === NodeType.VariableNode && (!classData.isEnum() || !enumData[key])) {
                 if (Config.useHelperForStaticGetter && staVarWithFunCall[key]) {
                     const defNode = staVarWithFunCall[key];
-                    lines.push(getVarStr(dat, clzCnt, true, false, true));
+                    lines.push(getVarStr(dat, clzCnt, true, true, true));
                     statGetter.push(`"${key}", function(this:${name}){ return ${getNodeStr(defNode, clzCnt)} },`)
                 } else {
                     lines.push(getVarStr(dat, clzCnt, true, false, true));
