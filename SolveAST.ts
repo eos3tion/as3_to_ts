@@ -807,7 +807,8 @@ function checkScope(node: AstNode, clzCnt: ClassContext, noAddThis?: boolean, ri
                 if (clz) {
                     const { staticFuns, enumData } = clz;
                     if (staticFuns[right]) {
-                        checkImp(v, clzCnt.impDict, right);
+                        let funName = getStaticFunName(right, v);
+                        checkImp(v, clzCnt.impDict, `${right}:${funName}`);
                         return "";
                     } else if (clz.isEnum() && enumData[right]) {
                         let na = getEnumClassName(v);
@@ -885,6 +886,8 @@ function getMemberAccessExpressionNodeStr(node: AstNode, clzCnt: ClassContext) {
     let left = checkScope(leftNode, clzCnt, false, right);
     if (left) {
         left = left + ".";
+    } else {//export 函数的特殊处理
+        right = getStaticFunName(right, clzCnt.name);
     }
     return `${left}${right}`;
 }
@@ -1751,6 +1754,10 @@ function getAs(left: string, right: string) {
 
 function getEnumClassName(className: string) {
     return `${className}_Const`
+}
+
+function getStaticFunName(funName: string, className: string) {
+    return `${className}_${funName}`;
 }
 
 function isLaya(fullName: string) {
