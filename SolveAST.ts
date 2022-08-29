@@ -1,4 +1,3 @@
-import fs from "fs";
 import path from "path";
 import { ClassData, getClassData, isScopeNode } from "./GetScopeData";
 import { appendTo, getChildIdx, getNamespaceIdent, solveIdentifierValue } from "./Helper";
@@ -65,16 +64,18 @@ function getFile(file: string, node: AstNode, baseDir: string) {
     } as PackageScope;
     let scope: AstNode;
     let refed: string[];
+    let fullName = "";
     if (packageNode) {
         scope = packageNode.children[1];
         pkg = solveIdentifierValue(packageNode.value);
-
+        fullName = getFullName(pkg, name);
+        let isLay = isLaya(fullName);
         if (scope) {
             const children = scope.children;
             for (let i = 0; i < children.length; i++) {
                 //检查
                 const node = children[i];
-                checkChild(node, inPackage);
+                checkChild(node, inPackage, isLay);
             }
             const clzs = inPackage.clzs;
             for (let name in clzs) {
@@ -98,8 +99,8 @@ function getFile(file: string, node: AstNode, baseDir: string) {
     return {
         name,
         path: importReplace(p),
-        pkg: pkg,
-        fullName: getFullName(pkg, name),
+        pkg,
+        fullName,
         node,
         file,
         imps,
@@ -113,7 +114,7 @@ function getFile(file: string, node: AstNode, baseDir: string) {
         refed,
         imports: []
     }
-    function checkChild(node: AstNode, { clzs, ints, other }: PackageScope) {
+    function checkChild(node: AstNode, { clzs, ints, other }: PackageScope, isLay?: boolean) {
         const nodeType = node.type;
         if (nodeType === NodeType.ImportNode) {
             const imp = solveIdentifierValue(node.value);
@@ -123,7 +124,7 @@ function getFile(file: string, node: AstNode, baseDir: string) {
                 imps.push(imp);
             }
         } else if (nodeType === NodeType.ClassNode) {
-            const cData = getClassData(node);
+            const cData = getClassData(node, isLay);
             clzs[cData.name] = cData;
         } else if (nodeType === NodeType.InterfaceNode) {
             const name = solveIdentifierValue(node.value);
@@ -232,11 +233,10 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
             if (inPackage) {
                 const { clzs, ints } = inPackage;
                 let cData = clzs?.[name];
-                let impflag = cData && !cData.isEnum() || ints?.[name];
+                let impflag = cData || ints?.[name];
                 if (impflag) {
-                    let usedFuncs = cData?.staticFunOnly ? [] : undefined;
                     const pkg = imp.slice(0, idx);
-                    impDict[name] = { name, fullName: imp, count: 0, pkg, usedFuncs }
+                    impDict[name] = { name, fullName: imp, count: 0, pkg, usedSubs: [] }
                 }
             }
         }
@@ -251,14 +251,10 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
                 const { clzs, ints } = dat.inPackage;
                 const pkg = dat.pkg;
                 for (let name in clzs) {
-                    let cData = clzs[name];
-                    let usedFuncs = cData.staticFunOnly ? [] : undefined;
-                    if (!cData.isEnum()) {
-                        impDict[name] = { pkg, name, fullName: getFullName(pkg, name), count: 0, usedFuncs };
-                    }
+                    impDict[name] = { pkg, name, fullName: getFullName(pkg, name), count: 0, usedSubs: [] };
                 }
                 for (let name in ints) {
-                    impDict[name] = { pkg, name, fullName: getFullName(pkg, name), count: 0, isInterface: true };
+                    impDict[name] = { pkg, name, fullName: getFullName(pkg, name), count: 0, isInterface: true, usedSubs: [] };
                 }
             }
         } else {
@@ -285,7 +281,7 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
     //将引用计数非 0 的 imp 放到文件头
     for (let name in impDict) {
         const impDat = impDict[name];
-        if (name !== fileName && impDat.count > 0) {
+        if (name !== fileName && (impDat.count > 0 || impDat.usedSubs.length > 0)) {
             const fullName = impDat.fullName;
             const impFileDat = uriDict[fullName];
             if (impFileDat) {
@@ -293,7 +289,7 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
                 if (refed) {
                     refed.push(fileName);
                 }
-                if (fullName !== "Laya" && !fullName.startsWith("laya.") && !impDat.isInterface) {
+                if (!isLaya(fullName) && !impDat.isInterface) {
                     imports.push(fullName);
                 }
                 let rela = path.relative(path.dirname(data.path), impFileDat.path).replaceAll("\\", "/");
@@ -303,11 +299,12 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
                 //laya路径特殊处理
                 //laya的as3项目目录结构为`libs/laya/src/`，而ts项目为`libs`
                 rela = rela.replace("laya/src/", "");
-                let funcs = impDat.usedFuncs;
-                if (funcs) {
-                    name = funcs.join(",");
+                let subs = impDat.usedSubs.concat();
+                if (impDat.count > 0) {
+                    subs.push(name);
                 }
-                let imp = `import {${name}} from "${rela}"`;
+
+                let imp = `import {${subs.join(",")}} from "${rela}"`;
                 v = imp + "\n" + v;
             }
         }
@@ -366,7 +363,7 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
 
 
     function solveClass(classData: ClassData, exp: boolean) {
-        const { baseClass, dict, staticDict, others, constructors, name, setterDict, node, enumData, staVarWithFunCall } = classData;
+        const { baseClass, dict, staticDict, others, constructors, name, setterDict, node, enumData, staVarWithFunCall, staticFuns } = classData;
 
         const lines = [] as string[];
         let statFun = [] as string[];
@@ -385,8 +382,7 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
             cnt
         }
         if (classData.isEnum()) {
-
-            lines.push(`declare const enum ${name}{`);
+            lines.push(`export const enum ${getEnumClassName(name)} {`);
             let backlines = [] as string[];
             for (let name in enumData) {
                 const node = enumData[name];
@@ -405,15 +401,11 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
             }
             appendTo(backlines, lines);
             lines.push(`}`);
-            return lines.join("\n");
-        } else if (classData.staticFunOnly) {
-            for (let key in staticDict) {
-                const dat = staticDict[key];//FunctionNode
-                //改成export function 写法
-                lines.push(`export ${getFunctionStr(dat, clzCnt, { noStatic: true, noIdent: true })}`)
-            }
-
-            return lines.join("\n");
+        }
+        for (let name in staticFuns) {
+            const dat = staticDict[name];//FunctionNode
+            //改成export function 写法
+            lines.push(`export ${getFunctionStr(dat, clzCnt, { noStatic: true, noIdent: true })}`)
         }
 
         if (baseClass && baseClass !== "Object") {
@@ -456,13 +448,13 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
         //先输出属性
         for (let key in staticDict) {
             const dat = staticDict[key];
-            if (dat.type === NodeType.VariableNode) {
+            if (dat.type === NodeType.VariableNode && (!classData.isEnum() || !enumData[key])) {
                 if (Config.useHelperForStaticGetter && staVarWithFunCall[key]) {
                     const defNode = staVarWithFunCall[key];
-                    lines.push(getVarStr(dat, clzCnt, true, true));
+                    lines.push(getVarStr(dat, clzCnt, true, false, true));
                     statFun.push(`"${key}", function(this:${name}){ return ${getNodeStr(defNode, clzCnt)} },`)
                 } else {
-                    lines.push(getVarStr(dat, clzCnt, true));
+                    lines.push(getVarStr(dat, clzCnt, true, false, true));
                     lines.push("");
                 }
             }
@@ -471,11 +463,11 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
         for (let key in staticDict) {
             const dat = staticDict[key];
             if (dat.type === NodeType.GetterNode) {
-                lines.push(getGetterStr(dat, clzCnt));
+                lines.push(getGetterStr(dat, clzCnt, false, true));
                 lines.push("");
                 let setter = setterDict[key];
                 if (setter) {//`getter`  `setter`  放一起
-                    lines.push(getSetterStr(setter, clzCnt));
+                    lines.push(getSetterStr(setter, clzCnt, true));
                     lines.push("");
                     delete setterDict[key];
                 }
@@ -521,7 +513,7 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
         //最后附加函数
         for (let key in staticDict) {
             const dat = staticDict[key];
-            if (dat.type === NodeType.FunctionNode) {
+            if (dat.type === NodeType.FunctionNode && !staticFuns[key]) {
                 lines.push(getFunctionStr(dat, clzCnt, { noFunc: true }));
             }
         }
@@ -659,7 +651,7 @@ type ImpRefs = {
     /**
      * 接口没有此方法
      */
-    usedFuncs?: string[];
+    usedSubs: string[];
 };
 
 interface ClassContext {
@@ -752,23 +744,24 @@ function getRegExpStr(node: RegExpLiteralNode, clzCnt: ClassContext) {
     return node.literal;
 }
 
-function checkImp(v: string, impDict: { [name: string]: ImpRefs }, func?: string) {
+function checkImp(v: string, impDict: { [name: string]: ImpRefs }, sub?: string) {
     if (impDict.hasOwnProperty(v)) {
         let d = impDict[v];
         if (d) {
-            d.count++;
-            if (func) {
-                let usedFuncs = d.usedFuncs;
-                if (usedFuncs.indexOf(func) === -1) {
-                    usedFuncs.push(func);
+            if (sub) {
+                let usedSubs = d.usedSubs;
+                if (usedSubs.indexOf(sub) === -1) {
+                    usedSubs.push(sub);
                 }
+            } else {
+                d.count++;
             }
         }
     }
     return v;
 }
 
-function checkScope(node: AstNode, clzCnt: ClassContext, noAddThis?: boolean) {
+function checkScope(node: AstNode, clzCnt: ClassContext, noAddThis?: boolean, right?: string) {
     let v = "";
     if (node.type === NodeType.IdentifierNode) {
         v = solveIdentifierValue(node.value);
@@ -787,19 +780,40 @@ function checkScope(node: AstNode, clzCnt: ClassContext, noAddThis?: boolean) {
         }
         if (!noAddThis) {
             if (v in dict || v in baseDict) {//成员变量
-                v = `this.${v} `;
+                v = `this.${v}`;
             } else if (v in staticDict || v in baseStaticDict) {
-                v = `${name}.${v} `;
+                if (cnt) {
+                    let clz = cnt.nameDict[name]?.inPackage?.clzs?.[name];
+                    if (clz) {
+                        const { staticFuns, enumData } = clz;
+                        if (staticFuns[v]) {
+                            return v;
+                        } else if (clz.isEnum() && enumData[v]) {
+                            let na = getEnumClassName(name);
+                            checkImp(name, clzCnt.impDict, na);
+                            return `${na}.${v}`;
+                        }
+                    }
+                }
+                v = `${name}.${v}`;
             } else {
                 noAddThis = true;
             }
         }
         if (noAddThis) {
             //检查
-            if (cnt) {
-                let f = cnt.nameDict[v]?.inPackage?.clzs?.[v]
-                if (f && f.staticFunOnly) {
-                    return "";
+            if (cnt && right) {
+                let clz = cnt.nameDict[v]?.inPackage?.clzs?.[v];
+                if (clz) {
+                    const { staticFuns, enumData } = clz;
+                    if (staticFuns[right]) {
+                        checkImp(v, clzCnt.impDict, right);
+                        return "";
+                    } else if (clz.isEnum() && enumData[right]) {
+                        let na = getEnumClassName(v);
+                        checkImp(v, clzCnt.impDict, na);
+                        return na;
+                    }
                 }
             }
             checkImp(v, impDict);
@@ -867,15 +881,12 @@ function getIfNodeStr(node: AstNode, clzCnt: ClassContext) {
 function getMemberAccessExpressionNodeStr(node: AstNode, clzCnt: ClassContext) {
     const children = node.children;
     const [leftNode, rightNode] = children;
-    let left = checkScope(leftNode, clzCnt);
     let right = getNodeStr(rightNode, clzCnt);
+    let left = checkScope(leftNode, clzCnt, false, right);
     if (left) {
         left = left + ".";
-    } else {
-        let v = getNodeStr(leftNode, clzCnt);
-        checkImp(v, clzCnt.impDict, right);
     }
-    return `${left}${right} `;
+    return `${left}${right}`;
 }
 
 function getNodeStr(node: AstNode, clzCnt: ClassContext): string {
@@ -1067,7 +1078,7 @@ function getNodeStr(node: AstNode, clzCnt: ClassContext): string {
     }
 }
 
-function getVarStr(node: AstNode, clzCnt: ClassContext, isClass?: boolean, noDefault?: boolean) {
+function getVarStr(node: AstNode, clzCnt: ClassContext, isClass?: boolean, noDefault?: boolean, noIdent?: boolean) {
     const children = node.children;
     let ident = "";
     let find = 0;
@@ -1078,7 +1089,9 @@ function getVarStr(node: AstNode, clzCnt: ClassContext, isClass?: boolean, noDef
         const child = children[i];
         const type = child.type;
         if (type === NodeType.NamespaceIdentifierNode) {
-            ident = getNamespaceIdent(child);
+            if (!noIdent) {
+                ident = getNamespaceIdent(child);
+            }
         } else if (type === NodeType.ModifiersContainerNode) {
             const sub = child.children[0];
             if (sub && sub.value === `"static"`) {
@@ -1298,7 +1311,7 @@ function getFunctionStr(node: AstNode, clzCnt: ClassContext, opts?: GetFuncStrPa
 
 
 
-function getSetterStr(node: AstNode, clzCnt: ClassContext) {
+function getSetterStr(node: AstNode, clzCnt: ClassContext, noIdent?: boolean) {
     const children = node.children;
     let ident = "";
     let isStatic = false;
@@ -1328,7 +1341,9 @@ function getSetterStr(node: AstNode, clzCnt: ClassContext) {
             }
         }
     }
-
+    if (noIdent) {
+        ident = "";
+    }
     let v = `${ident}${getStaticString(isStatic)}set ${name} (${paramString})`;
     if (block) {
         v += getBlockStr(block, clzCnt);
@@ -1337,7 +1352,7 @@ function getSetterStr(node: AstNode, clzCnt: ClassContext) {
 }
 
 
-function getGetterStr(node: AstNode, clzCnt: ClassContext, isStaticInterface?: boolean) {
+function getGetterStr(node: AstNode, clzCnt: ClassContext, isStaticInterface?: boolean, noIdent?: boolean) {
     const children = node.children;
     let ident = "";
     let isStatic = false;
@@ -1378,6 +1393,9 @@ function getGetterStr(node: AstNode, clzCnt: ClassContext, isStaticInterface?: b
     let retType = "";
     if (retNode) {
         retType = ": " + getTSType(checkScope(retNode, clzCnt));
+    }
+    if (noIdent) {
+        ident = "";
     }
     if (isStaticInterface) {
         return `static ${name}${retType}`;
@@ -1727,4 +1745,14 @@ function getAs(left: string, right: string) {
         right = "any";
     }
     return `${left} as ${right} `
+}
+
+
+
+function getEnumClassName(className: string) {
+    return `${className}_Const`
+}
+
+function isLaya(fullName: string) {
+    return fullName === "Laya" || fullName.startsWith("laya.")
 }

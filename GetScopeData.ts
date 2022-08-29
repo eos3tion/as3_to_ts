@@ -10,7 +10,7 @@ export type ClassData = ReturnType<typeof getClassData>;
  * @param node 
  * @returns 
  */
-export function getClassData(node: AstNode) {
+export function getClassData(node: AstNode, isLaya?: boolean) {
     const children = node.children;
     let name = solveIdentifierValue(node.value);
     let extIdx = getChildIdx(children, 0, NodeType.KeywordNode, NodeID.KeywordExtendsID);
@@ -32,10 +32,11 @@ export function getClassData(node: AstNode) {
         setterDict: {} as ClassDict,
         staticDict: {} as ClassDict,
         node,
-        enumData: undefined as { [name: string]: AstNode },
+        hasEnum: false,
+        enumData: {} as { [name: string]: AstNode },
         staVarWithFunCall: {} as { [name: string]: AstNode },
+        staticFuns: {} as { [name: string]: AstNode },
         isEnum,
-        staticFunOnly: false
     }
 
     let scopeIdx = getChildIdx(children, extIdx, NodeType.ScopedBlockNode);
@@ -46,17 +47,15 @@ export function getClassData(node: AstNode) {
 
     return classData;
     function isEnum(this: ClassData) {
-        return this.enumData && Config.useConstEnumForLiteralClass;
+        return this.hasEnum && Config.useConstEnumForLiteralClass;
     }
 
     function solveClassScope(node: AstNode, classData: ClassData) {
         const children = node.children;
-        const { dict, constructors, others, name: className, setterDict, staticDict, staVarWithFunCall } = classData;
+        const { dict, constructors, others, name: className, setterDict, staticDict, staVarWithFunCall, enumData, staticFuns } = classData;
         // 暂时不区分 public 还是 private protected
         // const pubDict = {} as ClassDict;
         //第一次遍历，得到类中`属性 / 方法`
-        let staticFunOnly = true;
-        let enumable = true;
         for (let i = 0; i < children.length; i++) {
             const child = children[i];
             const type = child.type;
@@ -86,23 +85,16 @@ export function getClassData(node: AstNode) {
                         let block = children[idx];
                         if (block.children.length > 0) {
                             constructors.push(child);
-                            staticFunOnly = false;
-                            enumable = false;
                         }
                     }
                 } else {
                     if (isStatic) {
-                        if (type !== NodeType.FunctionNode) {
-                            staticFunOnly = false;
-                        }
-                        if (type !== NodeType.VariableNode) {
-                            enumable = false;
+                        if (type === NodeType.FunctionNode) {
+                            staticFuns[name] = child;
                         }
                         staticDict[name] = child;
                     } else {
                         dict[name] = child;
-                        staticFunOnly = false;
-                        enumable = false;
                     }
                     if (type === NodeType.SetterNode) {
                         setterDict[name] = child;
@@ -113,15 +105,11 @@ export function getClassData(node: AstNode) {
             }
         }
 
-
-
         let hasEnum = false;
-        let enumData = {} as { [name: string]: AstNode };
         //检查是否都有默认值，并且值只有字符串和数值类型
         for (let name in staticDict) {
             const child = staticDict[name];
             if (child.type !== NodeType.VariableNode) {
-                enumable = false;
                 continue
             }
             const children = child.children;
@@ -130,7 +118,7 @@ export function getClassData(node: AstNode) {
                 const defNode = children[keyNodeIdx + 3];
                 let keyNode = children[keyNodeIdx];
                 if (keyNode.id !== NodeID.KeywordConstID) {
-                    enumable = false;
+                    continue
                 }
                 if (defNode) {
                     //defNode中，不能有funCall
@@ -150,20 +138,18 @@ export function getClassData(node: AstNode) {
 
                     if (result) {
                         staVarWithFunCall[name] = defNode;
-                        enumable = false;
+                        continue
                     } else {
                         hasEnum = true;
                         enumData[name] = defNode;
                     }
                 }
             }
-
         }
 
-        if (enumable && hasEnum) {
-            classData.enumData = enumData;
-        }
-        classData.staticFunOnly = staticFunOnly;
+        classData.enumData = enumData;
+        classData.hasEnum = !isLaya && hasEnum;
+
     }
 
     function getIsStatic(node: AstNode) {
