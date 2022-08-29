@@ -886,8 +886,6 @@ function getMemberAccessExpressionNodeStr(node: AstNode, clzCnt: ClassContext) {
     let left = checkScope(leftNode, clzCnt, false, right);
     if (left) {
         left = left + ".";
-    } else {//export 函数的特殊处理
-        right = getStaticFunName(right, clzCnt.name);
     }
     return `${left}${right}`;
 }
