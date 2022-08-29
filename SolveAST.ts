@@ -363,8 +363,10 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
 
 
     function solveClass(classData: ClassData, exp: boolean) {
-        const { baseClass, dict, staticDict, others, constructors, name, setterDict, node, enumData, staVarWithFunCall, staticFuns } = classData;
-
+        let { baseClass, dict, staticDict, others, constructors, name, setterDict, node, enumData, staVarWithFunCall, staticFuns } = classData;
+        if (!exp) {
+            staticFuns = EmptyObj;
+        }
         const lines = [] as string[];
         let statFun = [] as string[];
         let baseClassStr = "";
