@@ -35,7 +35,7 @@ export function getClassData(node: AstNode) {
         enumData: undefined as { [name: string]: AstNode },
         staVarWithFunCall: {} as { [name: string]: AstNode },
         isEnum,
-        staticOnly: false
+        staticFunOnly: false
     }
 
     let scopeIdx = getChildIdx(children, extIdx, NodeType.ScopedBlockNode);
@@ -55,7 +55,8 @@ export function getClassData(node: AstNode) {
         // 暂时不区分 public 还是 private protected
         // const pubDict = {} as ClassDict;
         //第一次遍历，得到类中`属性 / 方法`
-        let staticOnly = true;
+        let staticFunOnly = true;
+        let enumable = true;
         for (let i = 0; i < children.length; i++) {
             const child = children[i];
             const type = child.type;
@@ -85,15 +86,23 @@ export function getClassData(node: AstNode) {
                         let block = children[idx];
                         if (block.children.length > 0) {
                             constructors.push(child);
-                            staticOnly = false;
+                            staticFunOnly = false;
+                            enumable = false;
                         }
                     }
                 } else {
                     if (isStatic) {
+                        if (type !== NodeType.FunctionNode) {
+                            staticFunOnly = false;
+                        }
+                        if (type !== NodeType.VariableNode) {
+                            enumable = false;
+                        }
                         staticDict[name] = child;
                     } else {
                         dict[name] = child;
-                        staticOnly = false;
+                        staticFunOnly = false;
+                        enumable = false;
                     }
                     if (type === NodeType.SetterNode) {
                         setterDict[name] = child;
@@ -105,7 +114,7 @@ export function getClassData(node: AstNode) {
         }
 
 
-        let enumable = staticOnly;
+
         let hasEnum = false;
         let enumData = {} as { [name: string]: AstNode };
         //检查是否都有默认值，并且值只有字符串和数值类型
@@ -154,7 +163,7 @@ export function getClassData(node: AstNode) {
         if (enumable && hasEnum) {
             classData.enumData = enumData;
         }
-        classData.staticOnly = staticOnly;
+        classData.staticFunOnly = staticFunOnly;
     }
 
     function getIsStatic(node: AstNode) {

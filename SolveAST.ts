@@ -234,8 +234,9 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
                 let cData = clzs?.[name];
                 let impflag = cData && !cData.isEnum() || ints?.[name];
                 if (impflag) {
+                    let usedFuncs = cData?.staticFunOnly ? [] : undefined;
                     const pkg = imp.slice(0, idx);
-                    impDict[name] = { name, fullName: imp, count: 0, pkg }
+                    impDict[name] = { name, fullName: imp, count: 0, pkg, usedFuncs }
                 }
             }
         }
@@ -251,8 +252,9 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
                 const pkg = dat.pkg;
                 for (let name in clzs) {
                     let cData = clzs[name];
+                    let usedFuncs = cData.staticFunOnly ? [] : undefined;
                     if (!cData.isEnum()) {
-                        impDict[name] = { pkg, name, fullName: getFullName(pkg, name), count: 0 };
+                        impDict[name] = { pkg, name, fullName: getFullName(pkg, name), count: 0, usedFuncs };
                     }
                 }
                 for (let name in ints) {
@@ -301,6 +303,10 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
                 //laya路径特殊处理
                 //laya的as3项目目录结构为`libs/laya/src/`，而ts项目为`libs`
                 rela = rela.replace("laya/src/", "");
+                let funcs = impDat.usedFuncs;
+                if (funcs) {
+                    name = funcs.join(",");
+                }
                 let imp = `import {${name}} from "${rela}"`;
                 v = imp + "\n" + v;
             }
@@ -363,22 +369,30 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
         const { baseClass, dict, staticDict, others, constructors, name, setterDict, node, enumData, staVarWithFunCall } = classData;
 
         const lines = [] as string[];
+        let statFun = [] as string[];
+        let baseClassStr = "";
+        let baseDict = {} as { [name: string]: true };
+        let baseStaticDict = {} as { [name: string]: true };
+
+        const clzCnt = {
+            name,
+            lines,
+            dict,
+            staticDict,
+            baseDict,
+            impDict,
+            baseStaticDict,
+            cnt
+        }
         if (classData.isEnum()) {
-            const cnt = {
-                name,
-                staticDict: {},
-                baseStaticDict: {},
-                dict: {},
-                baseDict: {},
-                impDict,
-            }
+
             lines.push(`declare const enum ${name}{`);
             let backlines = [] as string[];
             for (let name in enumData) {
                 const node = enumData[name];
                 const type = node.type;
                 if (type === NodeType.NumericLiteralNode || type === NodeType.LiteralNode) {
-                    let v = getLiteralStr(node, cnt);
+                    let v = getLiteralStr(node, clzCnt);
                     if (v === "true") {
                         v = "1";
                     } else if (v === "false") {
@@ -386,18 +400,22 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
                     }
                     lines.push(`${name} = ${v},`)
                 } else {
-                    backlines.push(`${name} = ${getNodeStr(node, cnt)},`);
+                    backlines.push(`${name} = ${getNodeStr(node, clzCnt)},`);
                 }
             }
             appendTo(backlines, lines);
             lines.push(`}`);
             return lines.join("\n");
+        } else if (classData.staticFunOnly) {
+            for (let key in staticDict) {
+                const dat = staticDict[key];//FunctionNode
+                //改成export function 写法
+                lines.push(`export ${getFunctionStr(dat, clzCnt, { noStatic: true, noIdent: true })}`)
+            }
+
+            return lines.join("\n");
         }
 
-        let statFun = [] as string[];
-        let baseClassStr = "";
-        let baseDict = {} as { [name: string]: true };
-        let baseStaticDict = {} as { [name: string]: true };
         if (baseClass && baseClass !== "Object") {
             baseClassStr = ` extends ${baseClass}`;
             getBaseDict(classData, baseDict, baseStaticDict);
@@ -428,15 +446,7 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
         if (baseClass) {
             checkImp(baseClass, impDict);
         }
-        const clzCnt = {
-            name,
-            lines,
-            dict,
-            staticDict,
-            baseDict,
-            impDict,
-            baseStaticDict
-        }
+
         for (let i = 0; i < constructors.length; i++) {
             const constuctor = constructors[i];
             lines.push(getFunctionStr(constuctor, clzCnt, { noFunc: true, isConstructor: true, addSuper: baseClassStr !== "" }));
@@ -645,6 +655,11 @@ type ImpRefs = {
      * 是否为接口
      */
     isInterface?: boolean;
+
+    /**
+     * 接口没有此方法
+     */
+    usedFuncs?: string[];
 };
 
 interface ClassContext {
@@ -655,6 +670,7 @@ interface ClassContext {
     baseDict: { [name: string]: true };
     impDict: { [name: string]: ImpRefs }
     isInterface?: boolean;
+    cnt?: FileContext;
 }
 
 
@@ -736,11 +752,17 @@ function getRegExpStr(node: RegExpLiteralNode, clzCnt: ClassContext) {
     return node.literal;
 }
 
-function checkImp(v: string, impDict: { [name: string]: ImpRefs }) {
+function checkImp(v: string, impDict: { [name: string]: ImpRefs }, func?: string) {
     if (impDict.hasOwnProperty(v)) {
         let d = impDict[v];
         if (d) {
             d.count++;
+            if (func) {
+                let usedFuncs = d.usedFuncs;
+                if (usedFuncs.indexOf(func) === -1) {
+                    usedFuncs.push(func);
+                }
+            }
         }
     }
     return v;
@@ -750,7 +772,7 @@ function checkScope(node: AstNode, clzCnt: ClassContext, noAddThis?: boolean) {
     let v = "";
     if (node.type === NodeType.IdentifierNode) {
         v = solveIdentifierValue(node.value);
-        const { dict, staticDict, baseDict, impDict, baseStaticDict, name } = clzCnt;
+        const { dict, staticDict, baseDict, impDict, baseStaticDict, name, cnt } = clzCnt;
         //检查node的parent
         let parent = node.parent;
         while (parent) {
@@ -773,6 +795,13 @@ function checkScope(node: AstNode, clzCnt: ClassContext, noAddThis?: boolean) {
             }
         }
         if (noAddThis) {
+            //检查
+            if (cnt) {
+                let f = cnt.nameDict[v]?.inPackage?.clzs?.[v]
+                if (f && f.staticFunOnly) {
+                    return "";
+                }
+            }
             checkImp(v, impDict);
         }
     } else {
@@ -840,7 +869,13 @@ function getMemberAccessExpressionNodeStr(node: AstNode, clzCnt: ClassContext) {
     const [leftNode, rightNode] = children;
     let left = checkScope(leftNode, clzCnt);
     let right = getNodeStr(rightNode, clzCnt);
-    return `${left}.${right} `;
+    if (left) {
+        left = left + ".";
+    } else {
+        let v = getNodeStr(leftNode, clzCnt);
+        checkImp(v, clzCnt.impDict, right);
+    }
+    return `${left}${right} `;
 }
 
 function getNodeStr(node: AstNode, clzCnt: ClassContext): string {
