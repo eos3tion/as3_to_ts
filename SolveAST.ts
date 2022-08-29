@@ -368,7 +368,7 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
             staticFuns = EmptyObj;
         }
         const lines = [] as string[];
-        let statFun = [] as string[];
+        let statGetter = [] as string[];
         let baseClassStr = "";
         let baseDict = {} as { [name: string]: true };
         let baseStaticDict = {} as { [name: string]: true };
@@ -454,7 +454,7 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
                 if (Config.useHelperForStaticGetter && staVarWithFunCall[key]) {
                     const defNode = staVarWithFunCall[key];
                     lines.push(getVarStr(dat, clzCnt, true, false, true));
-                    statFun.push(`"${key}", function(this:${name}){ return ${getNodeStr(defNode, clzCnt)} },`)
+                    statGetter.push(`"${key}", function(this:${name}){ return ${getNodeStr(defNode, clzCnt)} },`)
                 } else {
                     lines.push(getVarStr(dat, clzCnt, true, false, true));
                     lines.push("");
@@ -523,9 +523,9 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
 
         lines.push(`} `)
 
-        if (statFun.length) {
+        if (statGetter.length) {
             lines.push(`$H.stc(${name},[`)
-            appendTo(statFun, lines);
+            appendTo(statGetter, lines);
             lines.push(`]);`);
         }
 
