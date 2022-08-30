@@ -1027,7 +1027,7 @@ function getNodeStr(node: AstNode, clzCnt: ClassContext): string {
         case NodeType.UnaryOperatorAtNode:
             throw Error(`不允许使用 @, [${node.root.file}]`);
         case NodeType.UnaryOperatorLogicalNotNode:
-            return getUnaryLeftStr(node, clzCnt, "!");
+            return getUnaryLeftStr(node, clzCnt, "!", true);
         case NodeType.UnaryOperatorBitwiseNotNode:
             return getUnaryLeftStr(node, clzCnt, "~");
         case NodeType.UnaryOperatorPlusNode:
@@ -1670,9 +1670,12 @@ function getUnaryRightStr(node: AstNode, clzCnt: ClassContext, right: string) {
     return `${v}${right} `;
 }
 
-function getUnaryLeftStr(node: AstNode, clzCnt: ClassContext, left: string) {
+function getUnaryLeftStr(node: AstNode, clzCnt: ClassContext, left: string, addBrakets?: boolean) {
     const child = node.children[0];
     let v = checkScope(child, clzCnt);
+    if (addBrakets) {
+        v = `(${v})`;
+    }
     return `${left}${v} `;
 }
 
