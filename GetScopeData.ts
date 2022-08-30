@@ -30,12 +30,15 @@ export function getClassData(node: AstNode, isLaya?: boolean) {
         others: [] as AstNode[],
         constructors: [] as AstNode[],
         setterDict: {} as ClassDict,
+        getterDict: {} as ClassDict,
         staticDict: {} as ClassDict,
         node,
         hasEnum: false,
-        enumData: {} as { [name: string]: AstNode },
-        staVarWithFunCall: {} as { [name: string]: AstNode },
-        staticFuns: {} as { [name: string]: AstNode },
+        enumData: {} as ClassDict,
+        staVarWithFunCall: {} as ClassDict,
+        staticFuns: {} as ClassDict,
+        staticGetters: {} as ClassDict,
+        staticSetters: {} as ClassDict,
         isEnum,
     }
 
@@ -52,7 +55,7 @@ export function getClassData(node: AstNode, isLaya?: boolean) {
 
     function solveClassScope(node: AstNode, classData: ClassData) {
         const children = node.children;
-        const { dict, constructors, others, name: className, setterDict, staticDict, staVarWithFunCall, enumData, staticFuns } = classData;
+        const { dict, constructors, others, name: className, setterDict, getterDict, staticDict, staVarWithFunCall, enumData, staticFuns, staticGetters, staticSetters } = classData;
         // 暂时不区分 public 还是 private protected
         // const pubDict = {} as ClassDict;
         //第一次遍历，得到类中`属性 / 方法`
@@ -91,14 +94,21 @@ export function getClassData(node: AstNode, isLaya?: boolean) {
                     if (isStatic) {
                         if (type === NodeType.FunctionNode && !isLaya && Config.convertStaticFuncToExportFunction) {
                             staticFuns[name] = child;
+                        } else if (type === NodeType.SetterNode) {
+                            staticSetters[name] = child;
+                        } else if (type === NodeType.GetterNode) {
+                            staticGetters[name] = child;
                         }
                         staticDict[name] = child;
                     } else {
                         dict[name] = child;
+                        if (type === NodeType.SetterNode) {
+                            setterDict[name] = child;
+                        } else if (type === NodeType.GetterNode) {
+                            getterDict[name] = child;
+                        }
                     }
-                    if (type === NodeType.SetterNode) {
-                        setterDict[name] = child;
-                    }
+
                 }
             } else {
                 others.push(child);

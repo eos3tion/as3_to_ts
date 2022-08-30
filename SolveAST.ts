@@ -363,7 +363,7 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
 
 
     function solveClass(classData: ClassData, exp: boolean) {
-        let { baseClass, dict, staticDict, others, constructors, name, setterDict, node, enumData, staVarWithFunCall, staticFuns } = classData;
+        let { baseClass, dict, getterDict, staticGetters, staticSetters, staticDict, others, constructors, name, setterDict, node, enumData, staVarWithFunCall, staticFuns } = classData;
         if (!exp) {
             staticFuns = EmptyObj;
         }
@@ -462,18 +462,23 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
             }
         }
 
-        for (let key in staticDict) {
-            const dat = staticDict[key];
-            if (dat.type === NodeType.GetterNode) {
-                lines.push(getGetterStr(dat, clzCnt, false, true));
+        for (let key in staticGetters) {
+            const dat = staticGetters[key];
+            lines.push(getGetterStr(dat, clzCnt, false, true));
+            lines.push("");
+            let setter = staticSetters[key];
+            if (setter) {//`getter`  `setter`  放一起
+                lines.push(getSetterStr(setter, clzCnt, true));
                 lines.push("");
-                let setter = setterDict[key];
-                if (setter) {//`getter`  `setter`  放一起
-                    lines.push(getSetterStr(setter, clzCnt, true));
-                    lines.push("");
-                    delete setterDict[key];
-                }
+                delete staticSetters[key];
             }
+        }
+
+
+        //处理剩余的setter
+        for (let key in staticSetters) {
+            lines.push(getSetterStr(staticSetters[key], clzCnt, true));
+            lines.push("");
         }
 
         for (let key in dict) {
@@ -484,17 +489,15 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
             }
         }
 
-        for (let key in dict) {
-            const dat = dict[key];
-            if (dat.type === NodeType.GetterNode) {
-                lines.push(getGetterStr(dat, clzCnt));
+        for (let key in getterDict) {
+            const dat = getterDict[key];
+            lines.push(getGetterStr(dat, clzCnt));
+            lines.push("");
+            let setter = setterDict[key];
+            if (setter) {//`getter`  `setter`  放一起
+                lines.push(getSetterStr(setter, clzCnt));
                 lines.push("");
-                let setter = setterDict[key];
-                if (setter) {//`getter`  `setter`  放一起
-                    lines.push(getSetterStr(setter, clzCnt));
-                    lines.push("");
-                    delete setterDict[key];
-                }
+                delete setterDict[key];
             }
         }
 
