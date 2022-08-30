@@ -889,7 +889,10 @@ function getMemberAccessExpressionNodeStr(node: AstNode, clzCnt: ClassContext) {
     if (left) {
         left = left + ".";
     } else {//export 函数的特殊处理
-        right = getStaticFunName(right, getNodeStr(leftNode, clzCnt));
+        let l = getNodeStr(leftNode, clzCnt);
+        if (l !== clzCnt.name) {
+            right = getStaticFunName(right, getNodeStr(leftNode, clzCnt));
+        }
     }
     return `${left}${right}`;
 }
