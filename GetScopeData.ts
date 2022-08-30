@@ -125,7 +125,7 @@ export function getClassData(node: AstNode, isLaya?: boolean) {
                     //defNode中，不能有funCall
                     const result = !checkEnum || walkChildren(defNode, tester => {
                         const ttype = tester.type;
-                        if (ttype === NodeType.FunctionCallNode || ttype === NodeType.ObjectLiteralNode || ttype === NodeType.ArrayLiteralNode || ttype === NodeType.VectorLiteralNode) {
+                        if (ttype === NodeType.FunctionCallNode || ttype === NodeType.ObjectLiteralNode || ttype === NodeType.ArrayLiteralNode || ttype === NodeType.VectorLiteralNode || ttype === NodeType.RegExpLiteralNode) {
                             return true;
                         } else if (ttype === NodeType.MemberAccessExpressionNode) {
                             //检查主体是不是本身
