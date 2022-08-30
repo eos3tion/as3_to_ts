@@ -1174,7 +1174,9 @@ function getForLoopStr(node: AstNode, clzCnt: ClassContext) {
     if (id === NodeID.ForEachLoopID) {
         //for each(A in B) -> for(A of B)
         const nodeIn = conditionNode.children[0];
-        return `for (${sovleInLoop(nodeIn, "of", clzCnt)})${getBlockStr(contentNode, clzCnt)} `;
+        let [_, name, con] = sovleInLoop(nodeIn, clzCnt);
+        let eachName = `$each_${name}`;
+        return `for(let ${eachName} in ${con}) {\nlet ${name}=${con}[${eachName}];\n ${getBlockStr(contentNode, clzCnt, false, true)}\n}`;
 
     } else {//当 ForLoopID 处理 
         //检查是for(var a in b)还是 for(var i=0;i<n;i++);
@@ -1182,14 +1184,15 @@ function getForLoopStr(node: AstNode, clzCnt: ClassContext) {
         let conStr = "";
         const child0 = conChildren[0];
         if (conChildren.length === 1 && child0.type === NodeType.BinaryOperatorInNode) {
-            conStr = sovleInLoop(child0, "in", clzCnt);
+            let [varStr, name, con] = sovleInLoop(child0, clzCnt);
+            conStr = `${varStr}${name} in ${con} `;
         } else {
             conStr = getConStr(conditionNode, clzCnt, ";");
         }
         return `for (${conStr})${getBlockStr(contentNode, clzCnt)} `
     }
 
-    function sovleInLoop(nodeIn: AstNode, middle: string, clzCnt: ClassContext) {
+    function sovleInLoop(nodeIn: AstNode, clzCnt: ClassContext) {
         const [varExpNode, listNode] = nodeIn.children;
         let varStr = "";
         let nameNode: AstNode;
@@ -1205,7 +1208,8 @@ function getForLoopStr(node: AstNode, clzCnt: ClassContext) {
             nameNode = varExpNode;
         }
         const name = solveIdentifierValue(nameNode.value);
-        return `${varStr}${name} ${middle} ${checkScope(listNode, clzCnt)} `
+        const con = checkScope(listNode, clzCnt);
+        return [varStr, name, con];
     }
 }
 
@@ -1484,8 +1488,8 @@ function getArrayType(node: AstNode, clzCnt: ClassContext) {
 function isSynthesizedNode(node: AstNode) {
     return node.value === "SYNTHESIZED";
 }
-function getBlockStr(node: AstNode, clzCnt: ClassContext, addSuper?: boolean) {
-    let isSynthesized = isSynthesizedNode(node);
+function getBlockStr(node: AstNode, clzCnt: ClassContext, addSuper?: boolean, noBrakets?: boolean) {
+    let isSynthesized = noBrakets || isSynthesizedNode(node);
 
     let lines = [] as string[];
     if (!isSynthesized) {
