@@ -626,14 +626,14 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
                 const v = impls[i];
                 let d = impDict[v];
                 if (d) {
-                    implFullName.push(`"${d.fullName}",`)
+                    implFullName.push(`"${d.fullName}"`)
                 }
             }
             if (implFullName.length) {
                 baseImpStr = `, [${implFullName.join(",")}]`
             }
         }
-
+        interfaces.sort();
         interfaces.push(`$H.ifc("${getFullName(pkg, name)}"${baseImpStr});`);
         return lines.join("\n");
 
