@@ -19,7 +19,9 @@ type FileContext = {
     /**
      * name 形如 `XXX`
      */
-    nameDict: { [name: string]: FileData }
+    nameDict: { [name: string]: FileData[] }
+
+    fileDict: { [path: string]: FileData };
     interfaces: string[]
 }
 
@@ -153,7 +155,7 @@ export async function solveAst(dict: { [file: string]: AstNode }, callback: { (f
     const pathDict = {} as { [path: string]: FileData };
     const fileDict = {} as { [file: string]: FileData };
     const uriDict = {} as { [uri: string]: FileData };
-    const nameDict = {} as { [name: string]: FileData };
+    const nameDict = {} as { [name: string]: FileData[] };
     for (const file in dict) {
         if (importFilter(path.relative(baseDir, file))) {
             continue
@@ -167,9 +169,10 @@ export async function solveAst(dict: { [file: string]: AstNode }, callback: { (f
         list.push(fileData);
         const name = fileData.name;
         if (nameDict[name]) {
-            console.error(`有同名文件，请自行处理：[${file}],[${nameDict[name].file}]`)
+            nameDict[name].push(fileData);
+        } else {
+            nameDict[name] = [fileData];
         }
-        nameDict[name] = fileData;
         uriDict[fileData.fullName] = fileData;
         pathDict[fileData.path] = fileData;
         fileDict[file] = fileData;
@@ -181,6 +184,7 @@ export async function solveAst(dict: { [file: string]: AstNode }, callback: { (f
         pathDict,
         uriDict,
         nameDict,
+        fileDict,
         interfaces
     }
 
@@ -214,15 +218,8 @@ function getFullName(pkg: string, name: string) {
     return name;
 }
 
-
-async function solveFileNode(data: FileData, cnt: FileContext) {
-    const { imps, impStars, pkg, file, name: fileName, inPackage, outPackage, imports } = data;
-    const { pkgDict, uriDict, nameDict, interfaces } = cnt;
-
-    const baseClasses = {} as { [name: string]: true };
-    //基于imps和impStars，创建引用计数器
-
-    const impDict = {} as { [name: string]: ImpRefs };
+function getImports<T>(data: FileData, uriDict: { [uri: string]: FileData }, pkgDict: { [pkg: string]: FileData[] }, forEach: { (name: string, fullName: string, pkg: string, isInterface?: boolean): T }): T {
+    const { imps, impStars, pkg, file } = data;
     for (let i = 0; i < imps.length; i++) {
         const imp = imps[i];
         const data = uriDict[imp];
@@ -236,7 +233,10 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
                 let impflag = cData || ints?.[name];
                 if (impflag) {
                     const pkg = imp.slice(0, idx);
-                    impDict[name] = { name, fullName: imp, count: 0, pkg, usedSubs: [] }
+                    let flag = forEach(name, imp, pkg)
+                    if (flag) {
+                        return flag
+                    }
                 }
             }
         }
@@ -251,16 +251,36 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
                 const { clzs, ints } = dat.inPackage;
                 const pkg = dat.pkg;
                 for (let name in clzs) {
-                    impDict[name] = { pkg, name, fullName: getFullName(pkg, name), count: 0, usedSubs: [] };
+                    let flag = forEach(name, getFullName(pkg, name), pkg);
+                    if (flag) {
+                        return flag;
+                    }
                 }
                 for (let name in ints) {
-                    impDict[name] = { pkg, name, fullName: getFullName(pkg, name), count: 0, isInterface: true, usedSubs: [] };
+                    let flag = forEach(name, getFullName(pkg, name), pkg, true);
+                    if (flag) {
+                        return flag;
+                    }
                 }
             }
         } else {
             console.error(`文件[${file}]中，无法找到指定包[${imPkg}]`)
         }
     }
+}
+
+async function solveFileNode(data: FileData, cnt: FileContext) {
+    const { imps, impStars, pkg, file, name: fileName, inPackage, outPackage, imports } = data;
+    const { pkgDict, uriDict, nameDict, fileDict, interfaces } = cnt;
+
+    const baseClasses = {} as { [name: string]: true };
+    //基于imps和impStars，创建引用计数器
+
+    const impDict = {} as { [name: string]: ImpRefs };
+    getImports(data, uriDict, pkgDict, (name, fullName, pkg, isInterface) => {
+
+        impDict[name] = { name, fullName, count: 0, pkg, usedSubs: [], isInterface }
+    })
 
     let v = "";
 
@@ -341,27 +361,33 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
         const baseClass = data.baseClass;
         if (baseClass) {
             let flag = false;
-            const fileDat = nameDict[baseClass]
-
-            if (fileDat) {
-                const baseClassData = fileDat.inPackage.clzs[baseClass];
-                if (baseClassData) {
-                    const baseDict = baseClassData.dict;
-                    for (let na in baseDict) {
-                        dict[na] = true;
+            let curFileData = fileDict[data.node.root.file];
+            if (curFileData) {
+                let fileDat = getImports(curFileData, uriDict, pkgDict, (name, fullName) => {
+                    if (name === baseClass) {
+                        return uriDict[fullName]
                     }
-                    const baseStaticDict = baseClassData.staticDict;
-                    for (let na in baseStaticDict) {
-                        staticDict[na] = true;
+                })
+                if (fileDat) {
+                    const baseClassData = fileDat.inPackage.clzs[baseClass];
+                    if (baseClassData) {
+                        const baseDict = baseClassData.dict;
+                        for (let na in baseDict) {
+                            dict[na] = true;
+                        }
+                        const baseStaticDict = baseClassData.staticDict;
+                        for (let na in baseStaticDict) {
+                            staticDict[na] = true;
+                        }
+                        return getBaseDict(baseClassData, dict, staticDict);
                     }
-                    return getBaseDict(baseClassData, dict, staticDict);
                 }
-            }
 
 
-            if (!flag && baseClass !== "Array") {
-                console.error(`[${file}]无法找到基类[${baseClass}]`);
-                debugger
+                if (!flag && baseClass !== "Array") {
+                    console.error(`[${file}]无法找到基类[${baseClass}]`);
+                    debugger
+                }
             }
         }
     }
@@ -793,16 +819,23 @@ function checkScope(node: AstNode, clzCnt: ClassContext, noAddThis?: boolean, ri
                 v = `this.${v}`;
             } else if (v in staticDict || v in baseStaticDict) {
                 if (cnt) {
-                    let clz = cnt.nameDict[name]?.inPackage?.clzs?.[name];
-                    if (clz) {
-                        const { staticFuns, enumData } = clz;
-                        if (staticFuns[v]) {
-                            return v;
-                        } else if (clz.isEnum() && enumData[v]) {
-                            let na = getEnumClassName(name);
-                            checkImp(name, clzCnt.impDict, na);
-                            return `${na}.${v}`;
+                    let fileDats = cnt.nameDict[name];
+                    if (fileDats) {
+                        for (let i = 0; i < fileDats.length; i++) {
+                            const fileDat = fileDats[i];
+                            let clz = fileDat.inPackage?.clzs?.[name];
+                            if (clz) {
+                                const { staticFuns, enumData } = clz;
+                                if (staticFuns[v]) {
+                                    return v;
+                                } else if (clz.isEnum() && enumData[v]) {
+                                    let na = getEnumClassName(name);
+                                    checkImp(name, clzCnt.impDict, na);
+                                    return `${na}.${v}`;
+                                }
+                            }
                         }
+
                     }
                 }
                 v = `${name}.${v}`;
@@ -813,17 +846,23 @@ function checkScope(node: AstNode, clzCnt: ClassContext, noAddThis?: boolean, ri
         if (noAddThis) {
             //检查
             if (cnt && right) {
-                let clz = cnt.nameDict[v]?.inPackage?.clzs?.[v];
-                if (clz) {
-                    const { staticFuns, enumData } = clz;
-                    if (staticFuns[right]) {
-                        let funName = getStaticFunName(right, v);
-                        checkImp(v, clzCnt.impDict, `${right} as ${funName}`);
-                        return "";
-                    } else if (clz.isEnum() && enumData[right]) {
-                        let na = getEnumClassName(v);
-                        checkImp(v, clzCnt.impDict, na);
-                        return na;
+                let fileDats = cnt.nameDict[v];
+                if (fileDats) {
+                    for (let i = 0; i < fileDats.length; i++) {
+                        const fileDat = fileDats[i];
+                        let clz = fileDat.inPackage?.clzs?.[v];
+                        if (clz) {
+                            const { staticFuns, enumData } = clz;
+                            if (staticFuns[right]) {
+                                let funName = getStaticFunName(right, v);
+                                checkImp(v, clzCnt.impDict, `${right} as ${funName}`);
+                                return "";
+                            } else if (clz.isEnum() && enumData[right]) {
+                                let na = getEnumClassName(v);
+                                checkImp(v, clzCnt.impDict, na);
+                                return na;
+                            }
+                        }
                     }
                 }
             }
