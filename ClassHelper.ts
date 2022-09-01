@@ -32,7 +32,9 @@ module $H {
                 writable: true
             })
         }
-        proto.interfaces = interfaces;
+        if (interfaces) {
+            proto.interfaces = interfaces;
+        }
     }
 
     export function ifc(name: string, base?: string[]) {
