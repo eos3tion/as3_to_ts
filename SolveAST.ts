@@ -277,37 +277,42 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
     v = solvePackageScope(v, outPackage, false);
 
 
-
+    const tmpImpList = [] as ImpRefs[];
     //将引用计数非 0 的 imp 放到文件头
     for (let name in impDict) {
         const impDat = impDict[name];
         if (name !== fileName && (impDat.count > 0 || impDat.usedSubs.length > 0)) {
-            const fullName = impDat.fullName;
-            const impFileDat = uriDict[fullName];
-            if (impFileDat) {
-                let refed = impFileDat.refed;
-                if (refed) {
-                    refed.push(fileName);
-                }
-                if (!isLaya(fullName) && !impDat.isInterface) {
-                    imports.push(fullName);
-                }
-                let rela = path.relative(path.dirname(data.path), impFileDat.path).replaceAll("\\", "/");
-                if (!rela.startsWith(".")) {
-                    rela = "./" + rela;
-                }
-                //laya路径特殊处理
-                //laya的as3项目目录结构为`libs/laya/src/`，而ts项目为`libs`
-                rela = rela.replace("laya/src/", "");
-                let subs = impDat.usedSubs.concat();
-                if (impDat.count > 0) {
-                    subs.push(name);
-                }
-
-                let imp = `import {${subs.join(",")}} from "${rela}"`;
-                v = imp + "\n" + v;
-            }
+            tmpImpList.push(impDat);
         }
+    }
+    tmpImpList.sort((a, b) => a.fullName < b.fullName ? -1 : 1)
+    for (let impDat of tmpImpList) {
+        const fullName = impDat.fullName;
+        const impFileDat = uriDict[fullName];
+        if (impFileDat) {
+            let refed = impFileDat.refed;
+            if (refed) {
+                refed.push(fileName);
+            }
+            if (!isLaya(fullName) && !impDat.isInterface) {
+                imports.push(fullName);
+            }
+            let rela = path.relative(path.dirname(data.path), impFileDat.path).replaceAll("\\", "/");
+            if (!rela.startsWith(".")) {
+                rela = "./" + rela;
+            }
+            //laya路径特殊处理
+            //laya的as3项目目录结构为`libs/laya/src/`，而ts项目为`libs`
+            rela = rela.replace("laya/src/", "");
+            let subs = impDat.usedSubs.concat();
+            if (impDat.count > 0) {
+                subs.push(impDat.name);
+            }
+
+            let imp = `import {${subs.join(",")}} from "${rela}"`;
+            v = imp + "\n" + v;
+        }
+
     }
 
 
