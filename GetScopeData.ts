@@ -56,6 +56,9 @@ export function getClassData(node: AstNode, isLaya?: boolean) {
     function solveClassScope(node: AstNode, classData: ClassData) {
         const children = node.children;
         const { dict, constructors, others, name: className, setterDict, getterDict, staticDict, staVarWithFunCall, enumData, staticFuns, staticGetters, staticSetters } = classData;
+        const file = node.root.file;
+        const noStaticFun = Config.convertStaticFuncToExportFunctionIgonreFiles.indexOf(file) > -1;
+
         // 暂时不区分 public 还是 private protected
         // const pubDict = {} as ClassDict;
         //第一次遍历，得到类中`属性 / 方法`
@@ -92,7 +95,7 @@ export function getClassData(node: AstNode, isLaya?: boolean) {
                     }
                 } else {
                     if (isStatic) {
-                        if (type === NodeType.FunctionNode && !isLaya && Config.convertStaticFuncToExportFunction) {
+                        if (type === NodeType.FunctionNode && !isLaya && Config.convertStaticFuncToExportFunction && !noStaticFun) {
                             staticFuns[name] = child;
                         } else if (type === NodeType.SetterNode) {
                             staticSetters[name] = child;

@@ -17,6 +17,10 @@ export const Config = {
      */
     convertStaticFuncToExportFunction: true,
     /**
+     * 将static类转 export function 的忽略列表
+     */
+    convertStaticFuncToExportFunctionIgonreFiles: [],
+    /**
      * 创建一个有序的导入文件  
      * 优先输出引用少的文件，排除`Laya`库的代码  
      * 
