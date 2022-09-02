@@ -1,6 +1,6 @@
 import path from "path";
 import { ClassData, getClassData, isScopeNode } from "./GetScopeData";
-import { appendTo, getChildIdx, getNamespaceIdent, solveIdentifierValue } from "./Helper";
+import { appendTo, getChildIdx, getNamespaceIdent, solveIdentifierValue, walkChildren } from "./Helper";
 import { importFilter, importReplace } from "./LayaIFFlasth";
 import { Config } from "./Config";
 import { createOrderedImportFile } from "./createOrderedImportFile";
@@ -482,8 +482,41 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
         for (let key in staticDict) {
             const dat = staticDict[key];
             if (dat.type === NodeType.VariableNode && (!classData.isEnum() || !enumData[key])) {
-                if (Config.useHelperForStaticGetter && staVarWithFunCall[key]) {
-                    const defNode = staVarWithFunCall[key];
+                let defNode = Config.useHelperForStaticGetter && staVarWithFunCall[key];
+                if (defNode) {
+                    let isComplex = walkChildren(defNode, tester => {
+                        const type = tester.type;
+                        if (type === NodeType.FunctionCallNode) {
+                            return true;
+                        } else if (type === NodeType.MemberAccessExpressionNode) {
+                            const [left, right] = tester.children;
+                            let val = solveIdentifierValue(left.value);
+                            if (val !== name) {
+                                if (right.type === NodeType.IdentifierNode) {
+                                    let rightV = solveIdentifierValue(right.value);
+                                    //检查有没有对应的类型
+                                    let fds = cnt.nameDict[val];
+                                    if (fds) {
+                                        for (let i = 0; i < fds.length; i++) {
+                                            const fd = fds[i];
+                                            if (fd) {
+                                                let c = fd.inPackage?.clzs[val];
+                                                if (c && c.isEnum() && c.enumData[rightV]) {
+                                                    return false;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                return true;
+                            }
+                        }
+                    })
+                    if (!isComplex) {
+                        defNode = undefined;
+                    }
+                }
+                if (defNode) {
                     lines.push(getVarStr(dat, clzCnt, true, true, true));
                     statGetter.push(`"${key}", function(this:${name}){ return ${getNodeStr(defNode, clzCnt)} },`)
                 } else {
