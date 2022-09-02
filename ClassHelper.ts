@@ -98,4 +98,48 @@ module $H {
         }
     }
 
+    /**
+     * 处理getter,setter
+     */
+    export function gs(ref: Class, params: any[]) {
+        let proto = ref.prototype;
+        for (let i = 0; i < params.length; i += 3) {
+            let name: string = params[i];
+            let getter: { (): any } = params[i + 1];
+            let setter: { (value: any): void } = params[i + 2];
+            do {
+                let flag = true;
+                if (!getter || !setter) {
+                    let sup = Object.getPrototypeOf(proto);
+                    if (sup) {
+                        let desc = Object.getOwnPropertyDescriptor(sup, name);
+                        if (desc) {
+                            if (!setter) {
+                                setter = desc.set;
+                                if (setter) {
+                                    sup[`$_set_${name}`] = setter;
+                                }
+                            }
+                            if (!getter) {
+                                getter = desc.get;
+                                if (getter) {
+                                    sup[`$_get_${name}`] = setter;
+                                }
+                            }
+                            flag = false;
+                        }
+                    }
+                }
+                if (flag) {
+                    break;
+                }
+            } while (true)
+            Object.defineProperty(proto, name, {
+                get: getter,
+                set: setter,
+                configurable: true,
+                enumerable: true
+            })
+        }
+    }
 }

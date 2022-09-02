@@ -270,8 +270,8 @@ function getImports<T>(data: FileData, uriDict: { [uri: string]: FileData }, pkg
 }
 
 async function solveFileNode(data: FileData, cnt: FileContext) {
-    const { imps, impStars, pkg, file, name: fileName, inPackage, outPackage, imports } = data;
-    const { pkgDict, uriDict, nameDict, fileDict, interfaces } = cnt;
+    const { pkg, name: fileName, inPackage, outPackage, imports } = data;
+    const { pkgDict, uriDict, interfaces } = cnt;
 
     const baseClasses = {} as { [name: string]: true };
     //基于imps和impStars，创建引用计数器
@@ -335,9 +335,6 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
 
     }
 
-
-
-
     return v;
     function solvePackageScope(v: string, scope: PackageScope, exp: boolean) {
 
@@ -358,38 +355,47 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
         return v;
     }
     function getBaseDict(data: ClassData, dict: { [name: string]: true }, staticDict: { [name: string]: true }) {
-        const baseClass = data.baseClass;
-        if (baseClass) {
-            let flag = false;
-            let curFileData = fileDict[data.node.root.file];
-            if (curFileData) {
-                let fileDat = getImports(curFileData, uriDict, pkgDict, (name, fullName) => {
-                    if (name === baseClass) {
-                        return uriDict[fullName]
-                    }
-                })
-                if (fileDat) {
-                    const baseClassData = fileDat.inPackage.clzs[baseClass];
-                    if (baseClassData) {
-                        const baseDict = baseClassData.dict;
-                        for (let na in baseDict) {
-                            dict[na] = true;
-                        }
-                        const baseStaticDict = baseClassData.staticDict;
-                        for (let na in baseStaticDict) {
-                            staticDict[na] = true;
-                        }
-                        return getBaseDict(baseClassData, dict, staticDict);
-                    }
-                }
-
-
-                if (!flag && baseClass !== "Array") {
-                    console.error(`[${file}]无法找到基类[${baseClass}]`);
-                    debugger
-                }
+        checkBase(data, cnt, baseClassData => {
+            const baseDict = baseClassData.dict;
+            for (let na in baseDict) {
+                dict[na] = true;
             }
-        }
+            const baseStaticDict = baseClassData.staticDict;
+            for (let na in baseStaticDict) {
+                staticDict[na] = true;
+            }
+        })
+
+        // const baseClass = data.baseClass;
+        // if (baseClass) {
+        //     let curFileData = fileDict[data.node.root.file];
+        //     if (curFileData) {
+        //         let fileDat = getImports(curFileData, uriDict, pkgDict, (name, fullName) => {
+        //             if (name === baseClass) {
+        //                 return uriDict[fullName]
+        //             }
+        //         })
+        //         if (fileDat) {
+        //             const baseClassData = fileDat.inPackage.clzs[baseClass];
+        //             if (baseClassData) {
+        //                 const baseDict = baseClassData.dict;
+        //                 for (let na in baseDict) {
+        //                     dict[na] = true;
+        //                 }
+        //                 const baseStaticDict = baseClassData.staticDict;
+        //                 for (let na in baseStaticDict) {
+        //                     staticDict[na] = true;
+        //                 }
+        //                 return getBaseDict(baseClassData, dict, staticDict);
+        //             }
+        //         }
+
+        //         if (baseClass !== "Array") {
+        //             console.error(`[${file}]无法找到基类[${baseClass}]`);
+        //             debugger
+        //         }
+        //     }
+        // }
     }
 
 
@@ -403,7 +409,7 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
         let baseClassStr = "";
         let baseDict = {} as { [name: string]: true };
         let baseStaticDict = {} as { [name: string]: true };
-
+        let supSetterGetter = [] as string[]
         const clzCnt = {
             name,
             lines,
@@ -554,21 +560,49 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
         }
 
         for (let key in getterDict) {
-            const dat = getterDict[key];
-            lines.push(getGetterStr(dat, clzCnt));
-            lines.push("");
-            let setter = setterDict[key];
-            if (setter) {//`getter`  `setter`  放一起
-                lines.push(getSetterStr(setter, clzCnt));
+            //检查是否基类有
+            let getDat = getterDict[key];
+            let setDat = setterDict[key];
+            let { bGet, bSet } = getBaseGetterSetter(key);
+            if (!getDat && bGet || !setDat && bSet) {
+                let getter = getGetterSetterBlockStr(getDat, clzCnt);
+                if (bGet) {
+                    getter.replaceAll(new RegExp(`super\\.${key}`, "g"), `${bGet.name}.prototype.$_set_${key}.call(this)`);
+                }
+                let setter: string;
+                if (setDat) {
+                    setter = getGetterSetterBlockStr(setDat, clzCnt);
+                    if (bSet) {
+                        setter.replaceAll(new RegExp(`super\\.${key}\\s*=\\s*(.*?)\\n`, "g"), `${bSet.name}.prototype.$_set_${key}.call(this, $1)`);
+                    }
+                }
+                supSetterGetter.push(`"${key}", ${getter || "undefined"}, ${setter || "undefined"}`);
+            } else {
+
+                lines.push(getGetterStr(getDat, clzCnt));
                 lines.push("");
-                delete setterDict[key];
+                if (setDat) {//`getter`  `setter`  放一起
+                    lines.push(getSetterStr(setDat, clzCnt));
+                    lines.push("");
+                    delete setterDict[key];
+                }
             }
         }
 
         //处理剩余的setter
         for (let key in setterDict) {
-            lines.push(getSetterStr(setterDict[key], clzCnt));
-            lines.push("");
+            let setDat = setterDict[key];
+            let { bGet, bSet } = getBaseGetterSetter(key);
+            if (bGet) {
+                let setter = getGetterSetterBlockStr(setDat, clzCnt);
+                if (bSet) {
+                    setter.replaceAll(new RegExp(`super\\.${key}\\s*=\\s*(.*?)\\n`, "g"), `${bSet.name}.prototype.$_set_${key}.call(this, $1)`);
+                }
+                supSetterGetter.push(`"${key}", undefined, ${setter}`);
+            } else {
+                lines.push(getSetterStr(setDat, clzCnt));
+                lines.push("");
+            }
         }
 
         //最后附加函数
@@ -589,6 +623,12 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
 
 
         lines.push(`} `)
+
+        if (supSetterGetter.length) {
+            lines.push(`$H.gs(${name},[`)
+            lines.push(supSetterGetter.join(",\n"));
+            lines.push(`]);`);
+        }
 
         if (statGetter.length) {
             lines.push(`$H.stc(${name},[`)
@@ -620,6 +660,31 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
         }
         return lines.join("\n");
 
+        /**
+         * 找到继承的getter和setter
+         * @param name 
+         * @returns 
+         */
+        function getBaseGetterSetter(name: string) {
+            let bGet: ClassData;
+            let bSet: ClassData;
+            checkBase(classData, cnt, baseData => {
+                if (!bGet && baseData.getterDict[name]) {
+                    bGet = baseData;
+                }
+                if (!bSet && baseData.setterDict[name]) {
+                    bSet = baseData;
+                }
+            })
+            return { bGet, bSet }
+        }
+
+        function getGetterSetterBlockStr(node: AstNode, clzCnt: ClassContext) {
+            const children = node.children;
+            const blockIdx = getChildIdx(children, 0, NodeType.ScopedBlockNode);
+            const block = children[blockIdx];
+            return `function()${getBlockStr(block, clzCnt)}`
+        }
     }
 
     function solveInterface(node: AstNode, exp: boolean) {
@@ -1312,10 +1377,11 @@ interface GetFuncStrParam {
     noStatic?: boolean;
 
     noIdent?: boolean;
+    noOverride?: boolean;
 }
 
 function getFunctionStr(node: AstNode, clzCnt: ClassContext, opts?: GetFuncStrParam) {
-    const { noFunc, isConstructor, addSuper, noBlock, noName, noStatic, addOptional, noIdent } = opts || EmptyObj as GetFuncStrParam;
+    const { noFunc, isConstructor, addSuper, noBlock, noName, noStatic, addOptional, noIdent, noOverride } = opts || EmptyObj as GetFuncStrParam;
     const children = node.children;
     let ident = "";
     let name: string;
@@ -1366,7 +1432,7 @@ function getFunctionStr(node: AstNode, clzCnt: ClassContext, opts?: GetFuncStrPa
         nameStr = name;
     }
     let override = "";
-    if (isOverride) {
+    if (!noOverride && isOverride) {
         override = "override ";
     }
     let paramsStr = params.join(",");
@@ -1854,4 +1920,36 @@ function getStaticFunName(funName: string, className: string) {
 
 function isLaya(fullName: string) {
     return fullName === "Laya" || fullName.startsWith("laya.")
+}
+
+function checkBase<T>(data: ClassData, cnt: FileContext, checker: { (data: ClassData): T }): T {
+    const baseClass = data.baseClass;
+    if (baseClass) {
+        const { fileDict, uriDict, pkgDict } = cnt;
+        let file = data.node.root.file;
+        let curFileData = fileDict[file];
+        if (curFileData) {
+            let fileDat = getImports(curFileData, uriDict, pkgDict, (name, fullName) => {
+                if (name === baseClass) {
+                    return uriDict[fullName]
+                }
+            })
+            if (fileDat) {
+                const baseClassData = fileDat.inPackage.clzs[baseClass];
+                if (baseClassData) {
+                    let res = checker(baseClassData);
+                    if (res) {
+                        return res;
+                    } else {
+                        return checkBase(baseClassData, cnt, checker);
+                    }
+                }
+            }
+
+            if (baseClass !== "Array") {
+                console.error(`[${file}]无法找到基类[${baseClass}]`);
+                debugger
+            }
+        }
+    }
 }
