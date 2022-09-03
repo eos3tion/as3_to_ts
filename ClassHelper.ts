@@ -107,24 +107,25 @@ module $H {
             let name: string = params[i];
             let getter: { (): any } = params[i + 1];
             let setter: { (value: any): void } = params[i + 2];
+            if (getter) {
+                addSuperGetter(proto, name);
+            }
+            if (setter) {
+                addSuperSetter(proto, name);
+            }
+            let sup = proto;
             do {
                 let flag = true;
                 if (!getter || !setter) {
-                    let sup = Object.getPrototypeOf(proto);
+                    sup = Object.getPrototypeOf(sup);
                     if (sup) {
                         let desc = Object.getOwnPropertyDescriptor(sup, name);
                         if (desc) {
                             if (!setter) {
                                 setter = desc.set;
-                                if (setter) {
-                                    sup[`$_set_${name}`] = setter;
-                                }
                             }
                             if (!getter) {
                                 getter = desc.get;
-                                if (getter) {
-                                    sup[`$_get_${name}`] = setter;
-                                }
                             }
                             flag = false;
                         }
@@ -140,6 +141,57 @@ module $H {
                 configurable: true,
                 enumerable: true
             })
+        }
+    }
+
+    function addSuperSetter(proto, name: string) {
+        let setterKey = `super_set_${name}`;
+        proto[setterKey] = function (value: any) {
+            let handler: { (value: any): void }
+            let sup = proto;
+            //向父级查找
+            do {
+                sup = Object.getPrototypeOf(sup);
+                if (sup) {
+                    let desc = Object.getOwnPropertyDescriptor(sup, name);
+                    if (desc) {
+                        handler = desc.set;
+                    }
+                } else {
+                    break
+                }
+            } while (!handler)
+            if (handler) {
+                proto[setterKey] = handler;
+                return handler(value);
+            } else {
+                console.error(`未找到基类的[${name}]的setter`);
+            }
+        }
+    }
+    function addSuperGetter(proto, name: string) {
+
+        let getterKey = `super_get_${name}`;
+        proto[getterKey] = function () {
+            let handler: { (): any }
+            //向父级查找
+            let sup = proto;
+            //向父级查找
+            do {
+                sup = Object.getPrototypeOf(sup);
+                if (sup) {
+                    let desc = Object.getOwnPropertyDescriptor(sup, name);
+                    handler = desc.get;
+                } else {
+                    break
+                }
+            } while (!handler)
+            if (handler) {
+                proto[getterKey] = handler;
+                return handler();
+            } else {
+                console.error(`未找到基类的[${name}]的getter`);
+            }
         }
     }
 }

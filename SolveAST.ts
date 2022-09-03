@@ -565,18 +565,14 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
             let setDat = setterDict[key];
             let { bGet, bSet } = getBaseGetterSetter(key);
             if (!getDat && bGet || !setDat && bSet) {
-                let getter = getGetterSetterBlockStr(getDat, clzCnt);
-                if (bGet) {
-                    getter.replaceAll(new RegExp(`super\\.${key}`, "g"), `${bGet.name}.prototype.$_set_${key}.call(this)`);
-                }
+                let getter = getGetterSetterBlockStr(getDat, clzCnt, name, key);
                 let setter: string;
                 if (setDat) {
-                    setter = getGetterSetterBlockStr(setDat, clzCnt);
-                    if (bSet) {
-                        setter.replaceAll(new RegExp(`super\\.${key}\\s*=\\s*(.*?)\\n`, "g"), `${bSet.name}.prototype.$_set_${key}.call(this, $1)`);
-                    }
+                    setter = getGetterSetterBlockStr(setDat, clzCnt, name, key);
                 }
-                supSetterGetter.push(`"${key}", ${getter || "undefined"}, ${setter || "undefined"}`);
+                if (setter || setter) {
+                    supSetterGetter.push(`"${key}", ${getter || "undefined"}, ${setter || "undefined"}`);
+                }
             } else {
 
                 lines.push(getGetterStr(getDat, clzCnt));
@@ -592,13 +588,12 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
         //处理剩余的setter
         for (let key in setterDict) {
             let setDat = setterDict[key];
-            let { bGet, bSet } = getBaseGetterSetter(key);
+            let { bGet } = getBaseGetterSetter(key);
             if (bGet) {
-                let setter = getGetterSetterBlockStr(setDat, clzCnt);
-                if (bSet) {
-                    setter.replaceAll(new RegExp(`super\\.${key}\\s*=\\s*(.*?)\\n`, "g"), `${bSet.name}.prototype.$_set_${key}.call(this, $1)`);
+                let setter = getGetterSetterBlockStr(setDat, clzCnt, name, key);
+                if (setter) {
+                    supSetterGetter.push(`"${key}", undefined, ${setter}`);
                 }
-                supSetterGetter.push(`"${key}", undefined, ${setter}`);
             } else {
                 lines.push(getSetterStr(setDat, clzCnt));
                 lines.push("");
@@ -679,11 +674,34 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
             return { bGet, bSet }
         }
 
-        function getGetterSetterBlockStr(node: AstNode, clzCnt: ClassContext) {
+        function getGetterSetterBlockStr(node: AstNode, clzCnt: ClassContext, name: string, key: string) {
             const children = node.children;
             const blockIdx = getChildIdx(children, 0, NodeType.ScopedBlockNode);
             const block = children[blockIdx];
-            return `function()${getBlockStr(block, clzCnt)}`
+            //检查block是不是只有一个child，并且直接
+            let isSetter = node.type === NodeType.SetterNode;
+            if (block.children.length === 1) {
+
+
+            }
+
+            let blockStr = getBlockStr(block, clzCnt);
+            let paramStr = "";
+            if (isSetter) {
+                let conIdx = getChildIdx(children, 0, NodeType.ContainerNode);
+                let conNode = children[conIdx];
+                if (conNode) {
+                    let sub = conNode.children[0];
+                    if (sub.type === NodeType.ParameterNode) {
+                        paramStr = `, ${getParamNodeString(sub, clzCnt)}`;
+                    }
+                }
+                blockStr = blockStr.replaceAll(new RegExp(`super\\.${key}\\s*=\\s*(.*?)(?=\\s+|\\)|\\(|\\n|;|\\r\\n|\\{|\\}|$)`, "g"), `this["super_set_${key}"]($1)`);
+            } else {
+                blockStr = blockStr.replaceAll(new RegExp(`super\\.${key}`, "g"), `this["super_get_${key}"]()`);
+            }
+
+            return `function(this:${name}${paramStr})${blockStr}`
         }
     }
 
@@ -1871,11 +1889,17 @@ function getInstanceOfStr(node: AstNode, clzCnt: ClassContext) {
             flag = false;
         } else {
             //检查name是不是interface
-            const impDict = clzCnt.impDict;
-            if (impDict.hasOwnProperty(name)) {
-                let ref = impDict[name];
-                v = `$H.isIfc(${checkScope(leftNode, clzCnt)},"${ref.fullName}")`;
-                flag = false;
+            const fDatas = clzCnt.cnt.nameDict[name];
+            if (fDatas) {
+                for (let i = 0; i < fDatas.length; i++) {
+                    const fData = fDatas[i];
+                    const inter = fData.inPackage.ints[name];
+                    if (inter) {
+                        v = `$H.isIfc(${checkScope(leftNode, clzCnt)},"${getFullName(fData.pkg, name)}")`;
+                        flag = false;
+                        break
+                    }
+                }
             }
         }
     }
