@@ -365,37 +365,6 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
                 staticDict[na] = true;
             }
         })
-
-        // const baseClass = data.baseClass;
-        // if (baseClass) {
-        //     let curFileData = fileDict[data.node.root.file];
-        //     if (curFileData) {
-        //         let fileDat = getImports(curFileData, uriDict, pkgDict, (name, fullName) => {
-        //             if (name === baseClass) {
-        //                 return uriDict[fullName]
-        //             }
-        //         })
-        //         if (fileDat) {
-        //             const baseClassData = fileDat.inPackage.clzs[baseClass];
-        //             if (baseClassData) {
-        //                 const baseDict = baseClassData.dict;
-        //                 for (let na in baseDict) {
-        //                     dict[na] = true;
-        //                 }
-        //                 const baseStaticDict = baseClassData.staticDict;
-        //                 for (let na in baseStaticDict) {
-        //                     staticDict[na] = true;
-        //                 }
-        //                 return getBaseDict(baseClassData, dict, staticDict);
-        //             }
-        //         }
-
-        //         if (baseClass !== "Array") {
-        //             console.error(`[${file}]无法找到基类[${baseClass}]`);
-        //             debugger
-        //         }
-        //     }
-        // }
     }
 
 
@@ -523,10 +492,10 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
                     }
                 }
                 if (defNode) {
-                    lines.push(getVarStr(dat, clzCnt, true, true, true));
+                    lines.push(getVarStr(dat, clzCnt, { isClass: true, noDefault: true, noIdent: true }));
                     statGetter.push(`"${key}", function(this:${name}){ return ${getNodeStr(defNode, clzCnt)} },`)
                 } else {
-                    lines.push(getVarStr(dat, clzCnt, true, false, true));
+                    lines.push(getVarStr(dat, clzCnt, { isClass: true, noDefault: false, noIdent: true }));
                     lines.push("");
                 }
             }
@@ -554,7 +523,7 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
         for (let key in dict) {
             const dat = dict[key];
             if (dat.type === NodeType.VariableNode) {
-                lines.push(getVarStr(dat, clzCnt, true));
+                lines.push(getVarStr(dat, clzCnt, { isClass: true, isMemeber: true }));
                 lines.push("");
             }
         }
@@ -839,10 +808,11 @@ function getParamNodeString(node: ParamNode, clzCnt: ClassContext, opt?: GetPara
 
 interface SolveParamOpt extends GetParamNodeStringOpt {
     addOpt?: boolean
+    isMemeber?: boolean;
 }
 
 function solveParam(paramNameNode: AstNode, paramTypeNode: AstNode, defaultNode: AstNode, clzCnt: ClassContext, opt?: SolveParamOpt) {
-    const { addOpt, noDefault } = opt || EmptyObj as SolveParamOpt;
+    const { addOpt, noDefault, isMemeber } = opt || EmptyObj as SolveParamOpt;
     let typeStr = checkScope(paramTypeNode, clzCnt, true);
     let defStr = "";
     let optStr = "";
@@ -863,6 +833,13 @@ function solveParam(paramNameNode: AstNode, paramTypeNode: AstNode, defaultNode:
         }
     }
     if (typeStr) {
+        if (isMemeber && !defStr) {
+            if (typeStr === "int" || typeStr === "uint") {
+                defStr = "= 0";
+            } else if (typeStr === "Number") {
+                defStr = "= NaN";
+            }
+        }
         typeStr = `: ${getTSType(typeStr)}`;
     }
     return `${solveIdentifierValue(paramNameNode.value)}${optStr}${typeStr}${defStr} `;
@@ -1251,7 +1228,16 @@ function getNodeStr(node: AstNode, clzCnt: ClassContext): string {
     }
 }
 
-function getVarStr(node: AstNode, clzCnt: ClassContext, isClass?: boolean, noDefault?: boolean, noIdent?: boolean) {
+interface GetVarStrOpt {
+    isClass?: boolean;
+    noDefault?: boolean;
+    noIdent?: boolean;
+
+    isMemeber?: boolean;
+}
+
+function getVarStr(node: AstNode, clzCnt: ClassContext, param?: GetVarStrOpt) {
+    const { isClass, noDefault, noIdent, isMemeber } = param || EmptyObj as GetVarStrOpt;
     const children = node.children;
     let ident = "";
     let find = 0;
@@ -1296,7 +1282,7 @@ function getVarStr(node: AstNode, clzCnt: ClassContext, isClass?: boolean, noDef
     if (defaultNode && defaultNode.type === NodeType.ChainedVariableNode || noDefault) {
         defaultNode = undefined;
     }
-    let v = solveParam(nameNode, typeNode, defaultNode, clzCnt);
+    let v = solveParam(nameNode, typeNode, defaultNode, clzCnt, { isMemeber });
     if (isClass) {
         v = ident + getStaticString(isStatic) + v;
     } else {
