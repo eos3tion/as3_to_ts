@@ -163,7 +163,7 @@ module $H {
             } while (!handler)
             if (handler) {
                 proto[setterKey] = handler;
-                return handler(value);
+                return handler.call(this, value);
             } else {
                 console.error(`未找到基类的[${name}]的setter`);
             }
@@ -188,7 +188,7 @@ module $H {
             } while (!handler)
             if (handler) {
                 proto[getterKey] = handler;
-                return handler();
+                return handler.call(this);
             } else {
                 console.error(`未找到基类的[${name}]的getter`);
             }
