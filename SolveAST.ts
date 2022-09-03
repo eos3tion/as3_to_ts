@@ -563,14 +563,14 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
             //检查是否基类有
             let getDat = getterDict[key];
             let setDat = setterDict[key];
-            let { bGet, bSet } = getBaseGetterSetter(key);
-            if (!getDat && bGet || !setDat && bSet) {
+            let { bSet } = getBaseGetterSetter(key);
+            if (!setDat && bSet) {
                 let getter = getGetterSetterBlockStr(getDat, clzCnt, name, key);
                 let setter: string;
                 if (setDat) {
                     setter = getGetterSetterBlockStr(setDat, clzCnt, name, key);
                 }
-                if (setter || setter) {
+                if (getter || setter) {
                     supSetterGetter.push(`"${key}", ${getter || "undefined"}, ${setter || "undefined"}`);
                 }
             } else {
@@ -580,8 +580,10 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
                 if (setDat) {//`getter`  `setter`  放一起
                     lines.push(getSetterStr(setDat, clzCnt));
                     lines.push("");
-                    delete setterDict[key];
                 }
+            }
+            if (setDat) {
+                delete setterDict[key];
             }
         }
 
