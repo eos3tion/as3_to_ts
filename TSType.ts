@@ -23,6 +23,7 @@ const typeofValue = {
     "Object": "object",
     "String": "string",
     "Boolean": "boolean",
+    "Class": "function",
 } as { [key: string]: string }
 
 export function getInstanceofType(type: string) {
