@@ -716,7 +716,7 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
                 const child = children[i];
                 switch (child.type) {
                     case NodeType.FunctionNode:
-                        lines.push(getFunctionStr(child, cnt, { noFunc: true }));
+                        lines.push(getFunctionStr(child, cnt, { noFunc: true, noBlock: true }));
                         break;
                     case NodeType.SetterNode:
                         lines.push(getSetterStr(child, cnt));
