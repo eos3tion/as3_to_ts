@@ -1,5 +1,5 @@
 import { Config } from "./Config";
-import { getChildIdx, solveIdentifierValue, walkChildren } from "./Helper";
+import { appendTo, getChildIdx, solveIdentifierValue, walkChildren } from "./Helper";
 
 
 
@@ -221,6 +221,7 @@ export function checkFunctionScope(node: AstNode) {
         return
     }
     const dict = {} as ClassDict;
+    scope.dict = dict;
     const paramNodes = getParamNodes(node);
     if (paramNodes) {
         for (let i = 0; i < paramNodes.length; i++) {
@@ -231,24 +232,34 @@ export function checkFunctionScope(node: AstNode) {
             }
         }
     }
-    const children = scope.children;
-    for (let i = 0; i < children.length; i++) {
-        const child = children[i];
-        let name: string;
-        switch (child.type) {
-            case NodeType.FunctionNode:
-                name = getFunctionName(child);
-                checkFunctionScope(child);
-                break;
-            case NodeType.VariableNode:
-                name = getVariableName(child);
-                break;
-        }
-        if (name) {
-            dict[name] = child;
+    const willChecked = [scope];
+    while (willChecked.length) {
+        const cur = willChecked.pop();
+        const children = cur.children;
+        for (let i = 0; i < children.length; i++) {
+            const child = children[i];
+            let name: string;
+            switch (child.type) {
+                case NodeType.FunctionNode:
+                    name = getFunctionName(child);
+                    checkFunctionScope(child);
+                    break;
+                case NodeType.VariableNode:
+                    name = getVariableName(child);
+                    break;
+                default://查找children中的children是否有VariableNode
+                    const subs = child.children;
+                    if (subs.length) {
+                        appendTo(subs, willChecked);
+                    }
+                    break;
+
+            }
+            if (name) {
+                dict[name] = child;
+            }
         }
     }
-    scope.dict = dict;
 }
 
 function getFunctionScope(child: AstNode) {
