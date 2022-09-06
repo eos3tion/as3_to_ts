@@ -234,30 +234,25 @@ export function checkFunctionScope(node: AstNode) {
     }
     const willChecked = [scope];
     while (willChecked.length) {
-        const cur = willChecked.pop();
-        const children = cur.children;
-        for (let i = 0; i < children.length; i++) {
-            const child = children[i];
-            let name: string;
-            switch (child.type) {
-                case NodeType.FunctionNode:
-                    name = getFunctionName(child);
-                    checkFunctionScope(child);
-                    break;
-                case NodeType.VariableNode:
-                    name = getVariableName(child);
-                    break;
-                default://查找children中的children是否有VariableNode
-                    const subs = child.children;
-                    if (subs.length) {
-                        appendTo(subs, willChecked);
-                    }
-                    break;
-
-            }
-            if (name) {
-                dict[name] = child;
-            }
+        const child = willChecked.pop();
+        let name: string;
+        switch (child.type) {
+            case NodeType.FunctionNode:
+                name = getFunctionName(child);
+                checkFunctionScope(child);
+                break;
+            case NodeType.VariableNode:
+                name = getVariableName(child);
+                break;
+            default://查找children中的children是否有VariableNode
+                const subs = child.children;
+                if (subs.length) {
+                    appendTo(subs, willChecked);
+                }
+                break;
+        }
+        if (name) {
+            dict[name] = child;
         }
     }
 }
