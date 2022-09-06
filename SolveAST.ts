@@ -203,6 +203,7 @@ export async function solveAst(dict: { [file: string]: AstNode }, callback: { (f
     }
 
     if (interfaces.length) {
+        interfaces.sort();
         callback("interfaces.ts", interfaces.join("\n"));
     }
 
@@ -746,7 +747,6 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
                 baseImpStr = `, [${implFullName.join(",")}]`
             }
         }
-        interfaces.sort();
         interfaces.push(`$H.ifc("${getFullName(pkg, name)}"${baseImpStr});`);
         return lines.join("\n");
 
