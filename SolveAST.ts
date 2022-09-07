@@ -455,21 +455,10 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
         }
         const nodeChildren = node.children;
 
-        let implIdx = getChildIdx(nodeChildren, 0, NodeType.KeywordNode, NodeID.KeywordImplementsID);
-        let impls: string[];
-        if (implIdx > -1) {
-            let contNode = nodeChildren[++implIdx];
-            if (contNode.type === NodeType.TransparentContainerNode) {
-                impls = getImpls(contNode, impDict);
-            }
-        }
 
         let classStartIdx = lines.length;
 
 
-        if (baseClass) {
-            checkImp(baseClass, impDict);
-        }
 
         for (let i = 0; i < constructors.length; i++) {
             const constuctor = constructors[i];
@@ -610,6 +599,20 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
         }
 
         if (classStartIdx !== lines.length || supSetterGetter.length || statGetter.length) {
+
+            if (baseClass) {
+                checkImp(baseClass, impDict);
+            }
+
+            let implIdx = getChildIdx(nodeChildren, 0, NodeType.KeywordNode, NodeID.KeywordImplementsID);
+            let impls: string[];
+            if (implIdx > -1) {
+                let contNode = nodeChildren[++implIdx];
+                if (contNode.type === NodeType.TransparentContainerNode) {
+                    impls = getImpls(contNode, impDict);
+                }
+            }
+
             let implStr = "";
             if (impls) {
                 implStr = ` implements ${impls.join(",")} `
