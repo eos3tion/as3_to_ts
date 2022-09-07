@@ -464,16 +464,8 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
             }
         }
 
-        let implStr = "";
-        if (impls) {
-            implStr = ` implements ${impls.join(",")} `
-        }
+        let classStartIdx = lines.length;
 
-        let expStr = "";
-        if (exp) {
-            expStr = "export "
-        }
-        lines.push(`${expStr}class ${name}${baseClassStr}${implStr} {`);
 
         if (baseClass) {
             checkImp(baseClass, impDict);
@@ -617,37 +609,50 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
             }
         }
 
+        if (classStartIdx !== lines.length || supSetterGetter.length || statGetter.length) {
+            let implStr = "";
+            if (impls) {
+                implStr = ` implements ${impls.join(",")} `
+            }
 
-        lines.push(`} `)
+            let expStr = "";
+            if (exp) {
+                expStr = "export "
+            }
+            lines.splice(classStartIdx, 0, `${expStr}class ${name}${baseClassStr}${implStr} {`);
 
-        if (supSetterGetter.length) {
-            lines.push(`$H.gs(${name},[`)
-            lines.push(supSetterGetter.join(",\n"));
-            lines.push(`]);`);
-        }
+            lines.push(`} `)
 
-        if (statGetter.length) {
-            lines.push(`$H.stc(${name},[`)
-            appendTo(statGetter, lines);
-            lines.push(`]);`);
-        }
 
-        let impStr = "";
-        if (impls && impls.length) {
-            const impLines = [] as string[];
-            for (let i = 0; i < impls.length; i++) {
-                const v = impls[i];
-                let d = impDict[v];
-                if (d) {
-                    impLines.push(`"${d.fullName}"`);
+            if (supSetterGetter.length) {
+                lines.push(`$H.gs(${name},[`)
+                lines.push(supSetterGetter.join(",\n"));
+                lines.push(`]);`);
+            }
+
+            if (statGetter.length) {
+                lines.push(`$H.stc(${name},[`)
+                appendTo(statGetter, lines);
+                lines.push(`]);`);
+            }
+
+            let impStr = "";
+            if (impls && impls.length) {
+                const impLines = [] as string[];
+                for (let i = 0; i < impls.length; i++) {
+                    const v = impls[i];
+                    let d = impDict[v];
+                    if (d) {
+                        impLines.push(`"${d.fullName}"`);
+                    }
+                }
+                if (impLines.length) {
+                    impStr = `, [\n${impLines.join(",\n")}\n]`;
                 }
             }
-            if (impLines.length) {
-                impStr = `, [\n${impLines.join(",\n")}\n]`;
-            }
-        }
 
-        lines.push(`$H.clz(${name},"${getFullName(pkg, name)}"${impStr});`);
+            lines.push(`$H.clz(${name},"${getFullName(pkg, name)}"${impStr});`);
+        }
 
         for (let i = 0; i < others.length; i++) {
             const other = others[i];
@@ -1689,13 +1694,13 @@ function getArrayType(node: AstNode, clzCnt: ClassContext) {
     let type = "any";
     if (node) {
         if (node.type === NodeType.IdentifierNode) {
-            type = getTSType(solveIdentifierValue(node.value));
+            type = solveIdentifierValue(node.value);
             checkImp(type, clzCnt.impDict);
         } else {
             type = getNodeStr(node, clzCnt);
         }
     }
-    return type;
+    return getTSType(type);
 }
 
 function isSynthesizedNode(node: AstNode) {
