@@ -179,10 +179,13 @@ export function readAstFile(file: string, callback: { (dict: { [file: string]: A
     function fileNodeEnd() {
         if (lastNode) {
             if (specialNodes.length) {
-                const content = fs.readFileSync(lastNode.root.file, "utf-8");
-                for (let i = 0; i < specialNodes.length; i++) {
-                    const node = specialNodes[i];
-                    checkNode(node, content);
+                let file = lastNode.root.file;
+                if (file) {
+                    const content = fs.readFileSync(file, "utf-8");
+                    for (let i = 0; i < specialNodes.length; i++) {
+                        const node = specialNodes[i];
+                        checkNode(node, content);
+                    }
                 }
             }
             specialNodes.length = 0;
@@ -192,9 +195,11 @@ export function readAstFile(file: string, callback: { (dict: { [file: string]: A
 }
 function setRootNode(node: AstNode, file: string, dict: { [file: string]: AstNode }) {
     if (node.level === 0 && node.type === NodeType.FileNode) {
-        node.file = file;
         node.root = node;
-        dict[file] = node;
+        if (fs.existsSync(file)) {
+            node.file = file;
+            dict[file] = node;
+        }
         return node;
     }
 }
