@@ -5,14 +5,16 @@ export function solveIdentifierValue(msg: string | string[]) {
     return msg.slice(1, -1).replaceAll("\n", "\\n");
 }
 
-export function getNamespaceIdent(node: AstNode) {
+export function getNamespaceIdent(node: AstNode, noBlank?: boolean) {
     let v = "";
     if (node) {//as3如果没有Namespace,默认private
         v = solveIdentifierValue(node.value);
         if (v === "public" || v === "internal") {
             v = "";
         } else {
-            v += " ";
+            if (!noBlank) {
+                v += " ";
+            }
         }
     }
     return v;

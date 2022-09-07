@@ -1,5 +1,5 @@
 import { Config } from "./Config";
-import { appendTo, getChildIdx, solveIdentifierValue, walkChildren } from "./Helper";
+import { appendTo, getChildIdx, getNamespaceIdent, solveIdentifierValue, walkChildren } from "./Helper";
 
 
 
@@ -39,6 +39,11 @@ export function getClassData(node: AstNode, isLaya?: boolean) {
         staticFuns: {} as ClassDict,
         staticGetters: {} as ClassDict,
         staticSetters: {} as ClassDict,
+        funs: {} as ClassDict,
+        /**
+         * private 方法，子类有同名方法的次数
+         */
+        priFuns: {} as { [name: string]: number },
         isEnum,
     }
 
@@ -55,7 +60,13 @@ export function getClassData(node: AstNode, isLaya?: boolean) {
 
     function solveClassScope(node: AstNode, classData: ClassData) {
         const children = node.children;
-        const { dict, constructors, others, name: className, setterDict, getterDict, staticDict, staVarWithFunCall, enumData, staticFuns, staticGetters, staticSetters } = classData;
+        const
+            { dict, constructors, others, name: className,
+                setterDict, getterDict, staticDict, staVarWithFunCall,
+                enumData, staticFuns, staticGetters, staticSetters, priFuns,
+                funs
+            }
+                = classData;
         const file = node.root.file;
         const noStaticFun = Config.convertStaticFuncToExportFunctionIgonreFiles.indexOf(file) > -1;
 
@@ -67,17 +78,18 @@ export function getClassData(node: AstNode, isLaya?: boolean) {
             const type = child.type;
             let name: string;
             let isStatic = false;
+            let isPravite = false;
             switch (type) {
                 case NodeType.FunctionNode:
                 case NodeType.GetterNode:
                 case NodeType.SetterNode:
                     name = getFunctionName(child);
-                    isStatic = getIsStatic(child);
+                    ({ isStatic, isPravite } = getIsStatic(child));
                     checkFunctionScope(child);
                     break;
                 case NodeType.VariableNode:
                     name = getVariableName(child);
-                    isStatic = getIsStatic(child);
+                    ({ isStatic } = getIsStatic(child));
                     break;
                 default:
                     break;
@@ -109,6 +121,11 @@ export function getClassData(node: AstNode, isLaya?: boolean) {
                             setterDict[name] = child;
                         } else if (type === NodeType.GetterNode) {
                             getterDict[name] = child;
+                        } else if (type === NodeType.FunctionNode) {//暂时不管 private getter setter的情况，应该不会有人这么无聊这样写代码吧
+                            if (isPravite) {
+                                priFuns[name] = 0;
+                            }
+                            funs[name] = child;
                         }
                     }
 
@@ -168,9 +185,13 @@ export function getClassData(node: AstNode, isLaya?: boolean) {
     function getIsStatic(node: AstNode) {
         const children = node.children;
         let isStatic = false;
+        let ident = "";
         for (let i = 0; i < children.length; i++) {
             const child = children[i];
-            if (child.type === NodeType.ModifiersContainerNode) {
+            const type = child.type;
+            if (type === NodeType.NamespaceIdentifierNode) {
+                ident = getNamespaceIdent(child, true);
+            } else if (type === NodeType.ModifiersContainerNode) {
                 //检查 children
                 const subs = child.children;
                 for (let i = 0; i < subs.length; i++) {
@@ -184,7 +205,7 @@ export function getClassData(node: AstNode, isLaya?: boolean) {
                 }
             }
         }
-        return isStatic;
+        return { isStatic, isPravite: ident === "private" };
     }
 
 }

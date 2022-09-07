@@ -190,15 +190,40 @@ export async function solveAst(dict: { [file: string]: AstNode }, callback: { (f
 
     let usedFile = [] as FileData[];
 
+    //预处理，处理基类
     for (const file in dict) {
         if (filter(file) && !importFilter(path.relative(baseDir, file))) {
             const dat = fileDict[file];
-            usedFile.push(dat);
-            try {
-                await solveFileNode(dat, context).then(v => callback(path.relative(baseDir, file).replace(".as", ".ts"), v));
-            } catch (e) {
-                console.log(`处理[${file}]出错：\n`, e)
+            let clzs = dat.inPackage?.clzs;
+            if (clzs) {
+                for (let name in clzs) {
+                    const clz = clzs[name];
+                    let funs = clz.funs;
+                    const names = Object.keys(funs);
+                    if (names.length) {
+                        checkBase(clz, context, (baseClassData) => {
+                            for (let j = 0; j < names.length; j++) {
+                                const name = names[j];
+                                const priFuns = baseClassData.priFuns;
+                                if (name in priFuns) {
+                                    priFuns[name]++;
+                                }
+                            }
+                        })
+                    }
+                }
             }
+            usedFile.push(dat);
+        }
+    }
+
+    for (let i = 0; i < usedFile.length; i++) {
+        const dat = usedFile[i];
+        const file = dat.file;
+        try {
+            await solveFileNode(dat, context).then(v => callback(path.relative(baseDir, file).replace(".as", ".ts"), v));
+        } catch (e) {
+            console.log(`处理[${file}]出错：\n`, e)
         }
     }
 
@@ -370,7 +395,12 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
 
 
     function solveClass(classData: ClassData, exp: boolean) {
-        let { baseClass, dict, getterDict, staticGetters, staticSetters, staticDict, others, constructors, name, setterDict, node, enumData, staVarWithFunCall, staticFuns } = classData;
+        let {
+            baseClass, dict, getterDict, staticGetters,
+            staticSetters, staticDict, others, constructors,
+            name, setterDict, node, enumData, staVarWithFunCall, staticFuns,
+            funs, priFuns
+        } = classData;
         if (!exp) {
             staticFuns = EmptyObj;
         }
@@ -388,6 +418,7 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
             baseDict,
             impDict,
             baseStaticDict,
+            priFuns,
             cnt
         }
         if (classData.isEnum()) {
@@ -573,12 +604,10 @@ async function solveFileNode(data: FileData, cnt: FileContext) {
         }
 
         //最后附加函数
-        for (let key in dict) {
-            const dat = dict[key];
-            if (dat.type === NodeType.FunctionNode) {
-                lines.push(getFunctionStr(dat, clzCnt, { noFunc: true }));
-                lines.push("");
-            }
+        for (let key in funs) {
+            const dat = funs[key];
+            lines.push(getFunctionStr(dat, clzCnt, { noFunc: true, isPrivate: key in priFuns }));
+            lines.push("");
         }
         //最后附加函数
         for (let key in staticDict) {
@@ -786,6 +815,7 @@ interface ClassContext {
     impDict: { [name: string]: ImpRefs }
     isInterface?: boolean;
     cnt?: FileContext;
+    priFuns?: { [name: string]: number };
 }
 
 
@@ -894,11 +924,21 @@ function checkImp(v: string, impDict: { [name: string]: ImpRefs }, sub?: string)
     return v;
 }
 
+function getPriFunsName(name: string, priFuns: { [name: string]: number }) {
+    if (priFuns) {
+        let count = priFuns[name];
+        if (count > 0) {
+            return `$${count}_${name}`;
+        }
+    }
+    return name;
+}
+
 function checkScope(node: AstNode, clzCnt: ClassContext, noAddThis?: boolean, right?: string) {
     let v = "";
     if (node.type === NodeType.IdentifierNode) {
         v = solveIdentifierValue(node.value);
-        const { dict, staticDict, baseDict, impDict, baseStaticDict, name, cnt } = clzCnt;
+        const { dict, staticDict, baseDict, impDict, baseStaticDict, name, cnt, priFuns } = clzCnt;
         //检查node的parent
         let parent = node.parent;
         while (parent) {
@@ -912,7 +952,8 @@ function checkScope(node: AstNode, clzCnt: ClassContext, noAddThis?: boolean, ri
             parent = parent.parent;
         }
         if (!noAddThis) {
-            if (v in dict || v in baseDict) {//成员变量
+            if (v in dict || v in baseDict) {//成员变量/函数
+                v = getPriFunsName(v, priFuns);
                 v = `this.${v}`;
             } else if (v in staticDict || v in baseStaticDict) {
                 if (cnt) {
@@ -1396,10 +1437,15 @@ interface GetFuncStrParam {
 
     noIdent?: boolean;
     noOverride?: boolean;
+
+    /**
+     * 是否检查私有函数
+     */
+    isPrivate?: boolean;
 }
 
 function getFunctionStr(node: AstNode, clzCnt: ClassContext, opts?: GetFuncStrParam) {
-    const { noFunc, isConstructor, addSuper, noBlock, noName, noStatic, addOptional, noIdent, noOverride } = opts || EmptyObj as GetFuncStrParam;
+    const { noFunc, isConstructor, addSuper, noBlock, noName, noStatic, addOptional, noIdent, noOverride, isPrivate } = opts || EmptyObj as GetFuncStrParam;
     const children = node.children;
     let ident = "";
     let name: string;
@@ -1447,6 +1493,9 @@ function getFunctionStr(node: AstNode, clzCnt: ClassContext, opts?: GetFuncStrPa
 
     let nameStr = "";
     if (!noName) {
+        if (isPrivate) {
+            name = getPriFunsName(name, clzCnt.priFuns);
+        }
         nameStr = name;
     }
     let override = "";
