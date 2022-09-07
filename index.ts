@@ -42,10 +42,12 @@ function mkdirs(dir: string) {
 
 readAstFile("ast.txt", dict => {
     solveAst(dict, (file, cnt) => {
-        const p = path.join(outDir, file);
-        mkdirs(path.dirname(p));
-        // cnt = `console.log("${file.replaceAll("\\", "/")}");\n` + cnt;
-        fs.writeFileSync(p, formatContent(cnt));
+        if (cnt) {
+            const p = path.join(outDir, file);
+            mkdirs(path.dirname(p));
+            // cnt = `console.log("${file.replaceAll("\\", "/")}");\n` + cnt;
+            fs.writeFileSync(p, formatContent(cnt));
+        }
     },
         inputBaseDir,
         file => file.indexOf("libs\\laya") == -1
