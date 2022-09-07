@@ -1786,13 +1786,12 @@ function getFuncCallStr(node: AstNode, clzCnt: ClassContext) {
         let imp = clzCnt.impDict.hasOwnProperty(name);
         let isAs = false;
         if (!isNew) {
-            if (imp) {//有引用至
+            if (imp || nameNode.type === NodeType.TypedExpressionNode) {//有引用至
                 //检查参数节点是否为单一node
                 if (conChildren.length === 1) {//此方法为as3的装箱操作，js没有，处理为  as 
                     const sub = conChildren[0];
                     v = getAs(checkScope(sub, clzCnt), name);
                     isAs = true;
-
                 }
             }
         }
