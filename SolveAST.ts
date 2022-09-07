@@ -1331,7 +1331,7 @@ function getForLoopStr(node: AstNode, clzCnt: ClassContext) {
         let eachName = `$each_${name}`;
         let typeStr = "";
         if (typeNode) {
-            typeStr = getParamTypeStr(typeNode, clzCnt);
+            typeStr = getTSType(getParamTypeStr(typeNode, clzCnt));
             if (typeStr) {
                 typeStr = ` as ${typeStr}`;
             }
@@ -1663,13 +1663,20 @@ function getBlockStr(node: AstNode, clzCnt: ClassContext, addSuper?: boolean, no
     let hasAddSuper = false;
     for (let i = 0; i < children.length; i++) {
         const child = children[i];
-        let v = getNodeStr(child, clzCnt);
-        if (addSuper) {
-            if (v.indexOf("super(") > -1) {
-                hasAddSuper = true;
+        let v = "";
+        if (child.type === NodeType.IdentifierNode) {
+            v = checkScope(child, clzCnt)
+        } else {
+            v = getNodeStr(child, clzCnt);
+            if (addSuper) {
+                if (v.indexOf("super(") > -1) {
+                    hasAddSuper = true;
+                }
             }
         }
-        lines.push(getNodeStr(child, clzCnt) + ";");
+        if (v) {
+            lines.push(v + ";");
+        }
     }
 
     if (!isSynthesized) {
