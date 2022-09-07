@@ -840,8 +840,6 @@ function solveParam(paramNameNode: AstNode, paramTypeNode: AstNode, defaultNode:
         if (isMemeber && !defStr) {
             if (typeStr === "int" || typeStr === "uint") {
                 defStr = "= 0";
-            } else if (typeStr === "Number") {
-                defStr = "= NaN";
             }
         }
         typeStr = `: ${getTSType(typeStr)}`;
