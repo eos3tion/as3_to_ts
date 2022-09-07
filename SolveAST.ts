@@ -811,9 +811,13 @@ interface SolveParamOpt extends GetParamNodeStringOpt {
     isMemeber?: boolean;
 }
 
+function getParamTypeStr(paramTypeNode: AstNode, clzCnt: ClassContext) {
+    return checkScope(paramTypeNode, clzCnt, true);
+}
+
 function solveParam(paramNameNode: AstNode, paramTypeNode: AstNode, defaultNode: AstNode, clzCnt: ClassContext, opt?: SolveParamOpt) {
     const { addOpt, noDefault, isMemeber } = opt || EmptyObj as SolveParamOpt;
-    let typeStr = checkScope(paramTypeNode, clzCnt, true);
+    let typeStr = getParamTypeStr(paramTypeNode, clzCnt);
     let defStr = "";
     let optStr = "";
     if (defaultNode && !clzCnt.isInterface) {
@@ -1325,9 +1329,17 @@ function getForLoopStr(node: AstNode, clzCnt: ClassContext) {
     if (id === NodeID.ForEachLoopID) {
         //for each(A in B) -> for(A of B)
         const nodeIn = conditionNode.children[0];
-        let [_, name, con] = sovleInLoop(nodeIn, clzCnt);
+        let { name, con, typeNode } = sovleInLoop(nodeIn, clzCnt);
         let eachName = `$each_${name}`;
-        return `for(let ${eachName} in ${con}) {\nlet ${name}=${con}[${eachName}];\n ${getBlockStr(contentNode, clzCnt, false, true)}\n}`;
+        let typeStr = "";
+        if (typeNode) {
+            typeStr = getParamTypeStr(typeNode, clzCnt);
+            if (typeStr) {
+                typeStr = ` as ${typeStr}`;
+            }
+        }
+        //尝试获取varExpNode中得type
+        return `for(let ${eachName} in ${con}) {\nlet ${name}=${con}[${eachName}]${typeStr};\n ${getBlockStr(contentNode, clzCnt, false, true)}\n}`;
 
     } else {//当 ForLoopID 处理 
         //检查是for(var a in b)还是 for(var i=0;i<n;i++);
@@ -1335,7 +1347,7 @@ function getForLoopStr(node: AstNode, clzCnt: ClassContext) {
         let conStr = "";
         const child0 = conChildren[0];
         if (conChildren.length === 1 && child0.type === NodeType.BinaryOperatorInNode) {
-            let [varStr, name, con] = sovleInLoop(child0, clzCnt);
+            let { varStr, name, con } = sovleInLoop(child0, clzCnt);
             conStr = `${varStr}${name} in ${con} `;
         } else {
             conStr = getConStr(conditionNode, clzCnt, ";");
@@ -1347,6 +1359,7 @@ function getForLoopStr(node: AstNode, clzCnt: ClassContext) {
         const [varExpNode, listNode] = nodeIn.children;
         let varStr = "";
         let nameNode: AstNode;
+        let typeNode: AstNode;
         if (varExpNode.type === NodeType.VariableExpressionNode) {
             const varChildren = varExpNode.children[0].children;
             const first = varChildren[0];
@@ -1354,13 +1367,14 @@ function getForLoopStr(node: AstNode, clzCnt: ClassContext) {
             if (first.type === NodeType.KeywordNode) {
                 varStr = "let "
                 nameNode = varChildren[1];
+                typeNode = varChildren[2];
             }
         } else {
             nameNode = varExpNode;
         }
         const name = solveIdentifierValue(nameNode.value);
         const con = checkScope(listNode, clzCnt);
-        return [varStr, name, con];
+        return { varStr, name, con, typeNode };
     }
 }
 
