@@ -104,27 +104,20 @@ module $H {
                 addSuperSetter(proto, name);
             }
             let sup = proto;
-            do {
-                let flag = true;
-                if (!getter || !setter) {
-                    sup = Object.getPrototypeOf(sup);
-                    if (sup) {
-                        let desc = Object.getOwnPropertyDescriptor(sup, name);
-                        if (desc) {
-                            if (!setter) {
-                                setter = desc.set;
-                            }
-                            if (!getter) {
-                                getter = desc.get;
-                            }
-                            flag = false;
+            while (sup && (!getter || !setter)) {
+                sup = Object.getPrototypeOf(sup);
+                if (sup) {
+                    let desc = Object.getOwnPropertyDescriptor(sup, name);
+                    if (desc) {
+                        if (!setter) {
+                            setter = desc.set;
+                        }
+                        if (!getter) {
+                            getter = desc.get;
                         }
                     }
                 }
-                if (flag) {
-                    break;
-                }
-            } while (true)
+            }
             Object.defineProperty(proto, name, {
                 get: getter,
                 set: setter,
