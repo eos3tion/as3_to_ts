@@ -246,27 +246,6 @@ function getFullName(pkg: string, name: string) {
 
 function getImports<T>(data: FileData, uriDict: { [uri: string]: FileData }, pkgDict: { [pkg: string]: FileData[] }, forEach: { (name: string, fullName: string, pkg: string, isInterface?: boolean): T }): T {
     const { imps, impStars, pkg, file } = data;
-    for (let i = 0; i < imps.length; i++) {
-        const imp = imps[i];
-        const data = uriDict[imp];
-        if (data) {
-            const idx = imp.lastIndexOf(".");
-            const name = imp.slice(idx + 1);
-            let inPackage = data.inPackage;
-            if (inPackage) {
-                const { clzs, ints } = inPackage;
-                let cData = clzs?.[name];
-                let impflag = cData || ints?.[name];
-                if (impflag) {
-                    const pkg = imp.slice(0, idx);
-                    let flag = forEach(name, imp, pkg)
-                    if (flag) {
-                        return flag
-                    }
-                }
-            }
-        }
-    }
     const stars = impStars.concat(pkg, "");
     for (let i = 0; i < stars.length; i++) {
         const imPkg = stars[i];
@@ -291,6 +270,27 @@ function getImports<T>(data: FileData, uriDict: { [uri: string]: FileData }, pkg
             }
         } else {
             console.error(`文件[${file}]中，无法找到指定包[${imPkg}]`)
+        }
+    }
+    for (let i = 0; i < imps.length; i++) {
+        const imp = imps[i];
+        const data = uriDict[imp];
+        if (data) {
+            const idx = imp.lastIndexOf(".");
+            const name = imp.slice(idx + 1);
+            let inPackage = data.inPackage;
+            if (inPackage) {
+                const { clzs, ints } = inPackage;
+                let cData = clzs?.[name];
+                let impflag = cData || ints?.[name];
+                if (impflag) {
+                    const pkg = imp.slice(0, idx);
+                    let flag = forEach(name, imp, pkg)
+                    if (flag) {
+                        return flag
+                    }
+                }
+            }
         }
     }
 }
